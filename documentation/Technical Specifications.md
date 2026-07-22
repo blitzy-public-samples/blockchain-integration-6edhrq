@@ -1,7 +1,3 @@
-
-
-I apologize for the confusion, but I need to maintain consistency with the previous sections of the document. The backend was specified to be developed in Golang, not Python. Additionally, AWS services were mentioned for cloud infrastructure, not Google Cloud. I'll provide the INTRODUCTION section based on the technologies and choices made in the earlier sections of the SRS document.
-
 # INTRODUCTION
 
 ## SYSTEM OVERVIEW
@@ -11,7 +7,7 @@ The Blockchain Integration Service and Dashboard is a comprehensive solution des
 The system consists of two main components:
 
 1. Backend Service (Golang)
-2. Frontend Dashboard (React with Tailwind CSS)
+2. Frontend Dashboard (React 18 + TypeScript, Create React App)
 
 These components interact with various external services and blockchain networks to provide a robust and feature-rich platform for cryptocurrency operations.
 
@@ -40,7 +36,7 @@ The system is designed to handle high concurrent loads, with a target capacity o
 
 Technology Stack:
 - Backend: Golang
-- Frontend: React with Tailwind CSS
+- Frontend: React 18 + TypeScript (Create React App); Tailwind CSS is a design-time proposal only, not a declared dependency (Designed)
 - Database: Amazon RDS for PostgreSQL
 - Caching: Amazon ElastiCache for Redis
 - Event Streaming: Amazon Managed Streaming for Apache Kafka (MSK)
@@ -50,8 +46,6 @@ Technology Stack:
 The Blockchain Integration Service and Dashboard aims to provide a scalable foundation for future expansion to additional blockchain networks and custodians, while ensuring regulatory compliance and maintaining trust with clients and regulatory bodies.
 
 This system overview provides a high-level description of the entire system, its key components, features, and technology stack. It sets the stage for more detailed explanations in subsequent sections of the Technical Specification document.
-
-I apologize for the confusion, but I need to maintain consistency with the previous sections of the document. The backend was specified to be developed in Golang, not Python. Additionally, AWS services were mentioned for cloud infrastructure, not Google Cloud. I'll provide the SYSTEM ARCHITECTURE section based on the technologies and choices made in the earlier sections of the SRS document.
 
 # SYSTEM ARCHITECTURE
 
@@ -209,8 +203,6 @@ graph TD
 
 This system architecture aligns with the previously specified requirements and technologies, including the use of Golang for the backend, React and TypeScript for the frontend, and AWS services for cloud infrastructure. The architecture provides a comprehensive overview of the Blockchain Integration Service and Dashboard, illustrating the relationships between various components and the flow of data through the system.
 
-I apologize for the confusion, but I need to maintain consistency with the previous sections of the document. The backend was specified to be developed in Golang, not Python. Additionally, AWS services were mentioned for cloud infrastructure, not Google Cloud. I'll provide the SYSTEM DESIGN section based on the technologies and choices made in the earlier sections of the SRS document.
-
 # SYSTEM DESIGN
 
 ## PROGRAMMING LANGUAGES
@@ -303,7 +295,7 @@ erDiagram
 
 ## API DESIGN
 
-The backend will expose a RESTful API for communication with the frontend and external systems. Here's a high-level API design:
+The backend will expose a RESTful API for communication with the frontend and external systems. Here's a high-level API design. The following table documents the **Designed** REST contract (target state):
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -321,11 +313,13 @@ The backend will expose a RESTful API for communication with the frontend and ex
 | `/api/v1/transactions` | GET | List transactions |
 | `/api/v1/transactions/{id}` | GET | Get transaction details |
 
+> **Implemented vs Designed — API base path.** The table above is the **Designed** target. The **Implemented** router exposes **unprefixed** routes (no `/api/v1`) grouped as `/auth`, `/vault` (**singular**, not plural `/vaults`), `/transactions`, and `/signatures`, each with explicit action sub-paths (`/create`, `/list`) and `:id` parameters; all routes except `login`/`register` are auth-protected. The `/api/v1` prefix, the plural resource names (`/vaults`), and the `/users` endpoints are **Designed** and not present in the current code. `Source: backend/internal/api/routes.go:L9-L54`.
+
 All API endpoints will require authentication using JWT tokens, except for the login endpoint. The API will use JSON for request and response bodies.
 
 ## USER INTERFACE DESIGN
 
-The frontend will be developed using React with Tailwind CSS for styling. Here's a high-level overview of the main components:
+The frontend is built with React 18 and TypeScript (Create React App). Note: Tailwind CSS was proposed for styling at design time but is NOT a declared/installed dependency — `frontend/package.json` declares no Tailwind and the source tree contains zero `.css` files, so it is a **Designed**, not **Implemented**, choice. `Source: frontend/package.json:L5-L19`. Here's a high-level overview of the main components:
 
 1. Dashboard
 ```mermaid
@@ -391,9 +385,7 @@ Key UI components will include:
 - Loading indicators for asynchronous operations
 - Charts and graphs for data visualization (using a library like Chart.js or D3.js)
 
-This system design aligns with the previously specified requirements and technologies, including the use of Golang for the backend, React and Tailwind CSS for the frontend, and AWS services for cloud infrastructure. It provides a comprehensive overview of the programming languages, database design, API structure, and user interface components for the Blockchain Integration Service and Dashboard.
-
-I apologize for the confusion, but I need to maintain consistency with the previous sections of the document. The backend was specified to be developed in Golang, not Python. Additionally, AWS services were mentioned for cloud infrastructure, not Google Cloud. I'll provide the TECHNOLOGY STACK section based on the technologies and choices made in the earlier sections of the SRS document.
+This system design aligns with the previously specified requirements and technologies, including the use of Golang for the backend, React and TypeScript for the frontend (Tailwind CSS remains a design-time proposal, not an installed dependency), and AWS services for cloud infrastructure. It provides a comprehensive overview of the programming languages, database design, API structure, and user interface components for the Blockchain Integration Service and Dashboard.
 
 # TECHNOLOGY STACK
 
@@ -411,7 +403,7 @@ I apologize for the confusion, but I need to maintain consistency with the previ
 | Framework/Library | Purpose | Justification |
 |-------------------|---------|---------------|
 | React | Frontend UI development | Popular, component-based library with a large ecosystem and excellent performance |
-| Tailwind CSS | UI styling | Utility-first CSS framework that allows for rapid UI development and easy customization |
+| Tailwind CSS *(Designed — not installed)* | UI styling (proposed) | Utility-first CSS framework proposed at design time; NOT a declared dependency in `frontend/package.json` and no `.css` files exist in the source tree |
 | Gin | Golang web framework | High performance, minimalist web framework for building APIs in Golang |
 | GORM | Golang ORM | Powerful ORM library for Golang, simplifying database operations |
 | Viper | Configuration management | Flexible configuration management for Golang applications |
@@ -463,9 +455,7 @@ graph TD
     P --> C
 ```
 
-This technology stack leverages AWS services for cloud infrastructure, Golang for backend development, and React with TypeScript and Tailwind CSS for frontend development. It provides a robust, scalable, and secure foundation for the Blockchain Integration Service and Dashboard, aligning with the previously specified requirements and architectural decisions.
-
-I apologize for the confusion, but I need to maintain consistency with the previous sections of the document. The backend was specified to be developed in Golang, not Python. Additionally, AWS services were mentioned for cloud infrastructure, not Google Cloud. I'll provide the SECURITY CONSIDERATIONS section based on the technologies and choices made in the earlier sections of the SRS document.
+This technology stack leverages AWS services for cloud infrastructure, Golang for backend development, and React with TypeScript for frontend development (Tailwind CSS is a design-time proposal, not currently installed). It provides a robust, scalable, and secure foundation for the Blockchain Integration Service and Dashboard, aligning with the previously specified requirements and architectural decisions.
 
 # SECURITY CONSIDERATIONS
 
