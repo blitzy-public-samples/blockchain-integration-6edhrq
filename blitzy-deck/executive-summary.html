@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blockchain Integration Service &amp; Dashboard — Executive Summary</title>
+  <!-- Inline (empty) favicon to keep the deck self-contained and avoid a stray 404 request. -->
+  <link rel="icon" href="data:,">
+
+
+  <!--
+    ==========================================================================
+    Blockchain Integration Service & Dashboard — Executive Summary
+    Single, self-contained reveal.js deck (AAP Section 0.10.2, Rule 3).
+    Audience: non-technical leadership. Requires zero code literacy.
+
+    Self-containment: every third-party library loads from a pinned CDN and the
+    Blitzy brand theme is embedded inline below. A canonical copy of the theme
+    also lives at blitzy-deck/references/blitzy-reveal-theme.css; the :root token
+    block here is kept byte-for-byte identical to that file. There are NO local
+    file dependencies and NO build step — open this file directly in a browser.
+
+    Pinned CDN versions (exact, non-negotiable):
+      reveal.js 5.1.0 · Mermaid 11.4.0 · Lucide 0.460.0
+    ==========================================================================
+  -->
+
+  <!-- Google Fonts: Inter (body), Space Grotesk (display), Fira Code (mono/eyebrow) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Fira+Code:wght@400;500&display=swap">
+
+  <!-- reveal.js 5.1.0 core CSS (reset + framework). No prebuilt reveal theme — the Blitzy inline theme replaces it. -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+
+  <!--
+    ==========================================================================
+    Inline Blitzy reveal.js theme (mirrors blitzy-deck/references/blitzy-reveal-theme.css)
+    Section 1 tokens are VERBATIM from AAP Section 0.10.2 (21 custom properties).
+    ==========================================================================
+  -->
+  <style>
+    /* -----------------------------------------------------------------------
+     * 1. Design tokens — VERBATIM from AAP Section 0.10.2 (authoritative)
+     *    21 custom properties, exact values, exact ordering. Do not modify.
+     * --------------------------------------------------------------------- */
+    :root {
+      --blitzy-primary: #5B39F3;
+      --blitzy-primary-dark: #2D1C77;
+      --blitzy-primary-navy: #1A105F;
+      --blitzy-primary-light: #7A6DEC;
+      --blitzy-primary-deep: #4101DB;
+      --blitzy-accent-teal: #94FAD5;
+      --blitzy-surface-0: #FFFFFF;
+      --blitzy-surface-1: #F4EFF6;
+      --blitzy-surface-2: #F2F0FE;
+      --blitzy-surface-3: #F5F5F5;
+      --blitzy-border: #D9D9D9;
+      --blitzy-border-soft: rgba(91, 57, 243, 0.18);
+      --blitzy-text: #333333;
+      --blitzy-text-muted: #999999;
+      --blitzy-text-invert: #FFFFFF;
+      --ff-body: 'Inter', system-ui, sans-serif;
+      --ff-display: 'Space Grotesk', 'Inter', sans-serif;
+      --ff-mono: 'Fira Code', 'Courier New', monospace;
+      --gradient-hero: linear-gradient(68deg, #7A6DEC 15.56%, #5B39F3 62.74%, #4101DB 84.44%);
+      --gradient-divider: linear-gradient(135deg, #2D1C77 0%, #5B39F3 100%);
+      --gradient-accent-bar: linear-gradient(90deg, #5B39F3 0%, #94FAD5 100%);
+    }
+
+    /* -----------------------------------------------------------------------
+     * 2. Base reveal.js surfaces — default (content) slides
+     * --------------------------------------------------------------------- */
+    .reveal-viewport { background: var(--blitzy-surface-0); }
+
+    .reveal {
+      font-family: var(--ff-body);
+      font-size: 34px;
+      font-weight: 400;
+      color: var(--blitzy-text);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .reveal .slides { text-align: left; }
+
+    /* Default content slide: light surface, comfortable padding for 1920x1080 */
+    .reveal .slides section {
+      height: 100%;
+      padding: 64px 96px;
+      box-sizing: border-box;
+    }
+
+    .reveal h1,
+    .reveal h2,
+    .reveal h3,
+    .reveal h4 {
+      font-family: var(--ff-display);
+      font-weight: 600;
+      color: var(--blitzy-primary-dark);
+      line-height: 1.12;
+      letter-spacing: -0.01em;
+      margin: 0 0 0.5em;
+      text-transform: none;
+    }
+
+    .reveal h1 { font-size: 2.1em; }
+    .reveal h2 { font-size: 1.6em; }
+    .reveal h3 { font-size: 1.2em; }
+
+    .reveal p { line-height: 1.42; }
+
+    .reveal a { color: var(--blitzy-primary); text-decoration: none; }
+    .reveal a:hover { color: var(--blitzy-primary-deep); text-decoration: underline; }
+
+    .reveal strong,
+    .reveal b { color: var(--blitzy-primary-dark); font-weight: 600; }
+
+    .reveal ul,
+    .reveal ol { display: inline-block; margin-left: 0.4em; }
+
+    .reveal li { margin-bottom: 0.45em; line-height: 1.35; }
+
+    .reveal .slides section ul li::marker { color: var(--blitzy-primary); }
+
+    .reveal ::selection {
+      background: var(--blitzy-accent-teal);
+      color: var(--blitzy-primary-navy);
+    }
+
+    /* -----------------------------------------------------------------------
+     * 3. Slide-type classes — applied to reveal.js section elements
+     * --------------------------------------------------------------------- */
+
+    /* 3.1 Title slide — hero gradient, white text, teal Fira Code eyebrow */
+    .reveal .slides section.slide-title {
+      background: var(--gradient-hero);
+      color: var(--blitzy-text-invert);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      text-align: left;
+    }
+    .reveal .slides section.slide-title h1,
+    .reveal .slides section.slide-title h2 {
+      font-family: var(--ff-display);
+      font-weight: 700;
+      font-size: 2.6em;
+      color: var(--blitzy-text-invert);
+    }
+    .reveal .slides section.slide-title p { color: rgba(255, 255, 255, 0.86); }
+
+    /* 3.2 Section divider — dark purple / gradient, centered title + hero icon */
+    .reveal .slides section.slide-divider {
+      background: var(--blitzy-primary-dark);
+      background: var(--gradient-divider);
+      color: var(--blitzy-text-invert);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+    .reveal .slides section.slide-divider h1,
+    .reveal .slides section.slide-divider h2 {
+      font-size: 2.2em;
+      color: var(--blitzy-text-invert);
+    }
+
+    /* 3.3 Closing slide — navy background, short takeaway, brand lockup + bar */
+    .reveal .slides section.slide-closing {
+      background: var(--blitzy-primary-navy);
+      color: var(--blitzy-text-invert);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      text-align: left;
+    }
+    .reveal .slides section.slide-closing h1,
+    .reveal .slides section.slide-closing h2 {
+      font-size: 2.3em;
+      color: var(--blitzy-text-invert);
+    }
+    .reveal .slides section.slide-closing p,
+    .reveal .slides section.slide-closing li { color: rgba(255, 255, 255, 0.82); }
+
+    /* -----------------------------------------------------------------------
+     * 4. Component classes
+     * --------------------------------------------------------------------- */
+
+    /* 4.1 Eyebrow — Fira Code, uppercase, letter-spaced; teal on dark, primary on light */
+    .reveal .eyebrow {
+      display: block;
+      font-family: var(--ff-mono);
+      font-weight: 500;
+      font-size: 0.5em;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      color: var(--blitzy-primary);
+      margin-bottom: 0.85em;
+    }
+    .reveal .slide-title .eyebrow,
+    .reveal .slide-divider .eyebrow,
+    .reveal .slide-closing .eyebrow { color: var(--blitzy-accent-teal); }
+
+    /* 4.2 Accent bar — thin gradient rule */
+    .reveal .accent-bar {
+      width: 160px;
+      height: 6px;
+      border: 0;
+      border-radius: 3px;
+      background: var(--gradient-accent-bar);
+      margin: 0.6em 0;
+    }
+
+    /* 4.3 KPI grid + cards */
+    .reveal .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 28px;
+      width: 100%;
+      margin-top: 0.6em;
+    }
+    .reveal .kpi-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: var(--blitzy-surface-2);
+      border: 1px solid var(--blitzy-border-soft);
+      border-radius: 16px;
+      padding: 32px 28px;
+    }
+    .reveal .kpi-icon {
+      color: var(--blitzy-primary);
+      width: 40px;
+      height: 40px;
+    }
+    .reveal .kpi-icon svg { width: 40px; height: 40px; stroke-width: 2; }
+    .reveal .kpi-value {
+      font-family: var(--ff-display);
+      font-weight: 700;
+      font-size: 2.4em;
+      line-height: 1;
+      color: var(--blitzy-primary);
+    }
+    .reveal .kpi-label {
+      font-family: var(--ff-body);
+      font-weight: 500;
+      font-size: 0.62em;
+      color: var(--blitzy-text-muted);
+    }
+
+    /* 4.4 Brand lockup — Blitzy wordmark treatment for title/closing */
+    .reveal .brand-lockup {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--ff-display);
+      font-weight: 600;
+      font-size: 0.8em;
+      letter-spacing: 0.04em;
+      color: var(--blitzy-text-invert);
+    }
+    .reveal .brand-lockup svg {
+      width: 28px;
+      height: 28px;
+      color: var(--blitzy-accent-teal);
+    }
+
+    /* 4.5 Hero icon — large centered Lucide icon for title/dividers */
+    .reveal .hero-icon {
+      color: var(--blitzy-accent-teal);
+      margin-bottom: 0.4em;
+    }
+    .reveal .hero-icon svg {
+      width: 96px;
+      height: 96px;
+      stroke-width: 1.5;
+    }
+
+    /* 4.6 Icon row — horizontal flex row of Lucide icons + labels */
+    .reveal .icon-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 40px;
+      margin-top: 0.6em;
+    }
+    .reveal .icon-row > * {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--ff-body);
+      font-size: 0.55em;
+      color: var(--blitzy-text-muted);
+    }
+    .reveal .icon-row svg {
+      width: 52px;
+      height: 52px;
+      color: var(--blitzy-primary);
+      stroke-width: 1.75;
+    }
+    /* Icon row on dark slide-types uses teal icons + inverted labels */
+    .reveal .slide-title .icon-row svg,
+    .reveal .slide-divider .icon-row svg,
+    .reveal .slide-closing .icon-row svg { color: var(--blitzy-accent-teal); }
+    .reveal .slide-title .icon-row > *,
+    .reveal .slide-divider .icon-row > *,
+    .reveal .slide-closing .icon-row > * { color: rgba(255, 255, 255, 0.82); }
+
+    /* Generic Lucide icon alignment helper */
+    .reveal [data-lucide] { display: inline-flex; vertical-align: middle; }
+
+    /* -----------------------------------------------------------------------
+     * 5. Mermaid diagram container — centered, sized to fit 1920x1080, on-brand card
+     * --------------------------------------------------------------------- */
+    .reveal .mermaid {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      max-width: 100%;
+      max-height: 760px;
+      margin: 0.4em auto;
+      padding: 28px;
+      overflow: hidden;
+      background: var(--blitzy-surface-2);
+      border: 1px solid var(--blitzy-border-soft);
+      border-radius: 16px;
+    }
+    .reveal .mermaid svg {
+      max-width: 100%;
+      max-height: 720px;
+      height: auto;
+    }
+    /* Safeguard: pin the injected diagram's HTML-label typography to match exactly what
+     * Mermaid measured with (fontFamily = Inter, normal weight, normal letter-spacing).
+     * The deck's global .reveal type rules must NOT leak a heavier weight or letter
+     * spacing into the labels, or the rendered text would be wider than the measured
+     * box and clip. overflow:visible lets any sub-pixel remainder spill into the node
+     * rectangle's padding (the rect is ~30px wider than the label on each side) rather
+     * than being cropped at the foreignObject edge. */
+    .reveal .mermaid svg .nodeLabel,
+    .reveal .mermaid svg .edgeLabel,
+    .reveal .mermaid svg .cluster-label,
+    .reveal .mermaid svg foreignObject div,
+    .reveal .mermaid svg foreignObject span,
+    .reveal .mermaid svg foreignObject p {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-weight: 400;
+      letter-spacing: normal;
+      white-space: nowrap;
+    }
+    .reveal .mermaid svg foreignObject {
+      overflow: visible;
+    }
+
+    /* -----------------------------------------------------------------------
+     * 6. Styled tables — on-brand header + zebra rows for KPI/status tables
+     * --------------------------------------------------------------------- */
+    .reveal table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.62em;
+      margin: 0.4em 0;
+    }
+    .reveal table th {
+      background: var(--blitzy-primary);
+      color: var(--blitzy-text-invert);
+      font-family: var(--ff-display);
+      font-weight: 600;
+      text-align: left;
+      padding: 12px 18px;
+    }
+    .reveal table td {
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--blitzy-border);
+      color: var(--blitzy-text);
+    }
+    .reveal table tr:nth-child(even) td { background: var(--blitzy-surface-1); }
+
+    /* -----------------------------------------------------------------------
+     * 7. Inline code — Fira Code on a subtle surface (NO fenced code in slides)
+     * --------------------------------------------------------------------- */
+    .reveal code {
+      font-family: var(--ff-mono);
+      font-size: 0.85em;
+      color: var(--blitzy-primary-deep);
+      background: var(--blitzy-surface-3);
+      border: 1px solid var(--blitzy-border-soft);
+      border-radius: 6px;
+      padding: 0.1em 0.4em;
+    }
+    /* Inline code on dark slide-types */
+    .reveal .slide-title code,
+    .reveal .slide-divider code,
+    .reveal .slide-closing code {
+      color: var(--blitzy-accent-teal);
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    /* -----------------------------------------------------------------------
+     * 8. Deck-specific helpers (on-brand extensions of the canonical theme)
+     * --------------------------------------------------------------------- */
+
+    /* Title-slide subtitle + audience framing line */
+    .reveal .slide-title .deck-subtitle {
+      font-family: var(--ff-display);
+      font-weight: 500;
+      font-size: 1.05em;
+      color: rgba(255, 255, 255, 0.92);
+      margin: 0.1em 0 0.3em;
+    }
+    .reveal .slide-title .audience {
+      font-family: var(--ff-body);
+      font-size: 0.62em;
+      color: rgba(255, 255, 255, 0.78);
+      margin-top: 0.2em;
+    }
+
+    /* Figure caption / lead sentence that references a diagram by name */
+    .reveal .fig-caption {
+      font-family: var(--ff-body);
+      font-size: 0.58em;
+      color: var(--blitzy-text-muted);
+      margin: 0.1em 0 0.4em;
+      max-width: 1500px;
+    }
+    .reveal .slide-lead {
+      font-size: 0.72em;
+      color: var(--blitzy-text);
+      margin: 0 0 0.5em;
+      max-width: 1500px;
+    }
+
+    /* Maturity discipline mini-legend (Implemented / Provisioned / Designed) */
+    .reveal .maturity-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin: 0.2em 0 0.5em;
+      font-size: 0.55em;
+      color: var(--blitzy-text-muted);
+    }
+    .reveal .maturity-legend span { display: inline-flex; align-items: center; gap: 8px; }
+
+    /* Status pills used inside styled tables */
+    .reveal .pill {
+      display: inline-block;
+      font-family: var(--ff-mono);
+      font-size: 0.82em;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      padding: 0.12em 0.6em;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .reveal .pill-impl {
+      color: var(--blitzy-primary-navy);
+      background: var(--blitzy-accent-teal);
+      border-color: rgba(26, 16, 95, 0.18);
+    }
+    .reveal .pill-prov {
+      color: #6b4b00;
+      background: #FFE9B0;
+      border-color: rgba(107, 75, 0, 0.22);
+    }
+    .reveal .pill-designed {
+      color: var(--blitzy-primary-deep);
+      background: var(--blitzy-surface-2);
+      border-color: var(--blitzy-border-soft);
+    }
+
+    /* "Designed goals" callout on the security slide */
+    .reveal .designed-note {
+      margin-top: 0.5em;
+      padding: 14px 22px;
+      background: var(--blitzy-surface-2);
+      border: 1px solid var(--blitzy-border-soft);
+      border-left: 6px solid var(--blitzy-primary);
+      border-radius: 10px;
+      font-size: 0.58em;
+      color: var(--blitzy-text);
+    }
+    .reveal .designed-note strong { color: var(--blitzy-primary-deep); }
+
+    /* Feature/value card grid (lighter-weight than KPI cards) */
+    .reveal .value-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      margin-top: 0.5em;
+    }
+    .reveal .value-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--blitzy-surface-1);
+      border: 1px solid var(--blitzy-border-soft);
+      border-radius: 12px;
+      padding: 18px 20px;
+      font-size: 0.6em;
+      color: var(--blitzy-text);
+    }
+    .reveal .value-card svg { width: 30px; height: 30px; color: var(--blitzy-primary); flex: 0 0 auto; }
+
+    /* Two-up layout for a diagram beside a short caption when useful */
+    .reveal .slides section h2 + .fig-caption { margin-top: -0.2em; }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- ================= SLIDE 1 — TITLE ================= -->
+      <section class="slide-title">
+        <span class="hero-icon"><i data-lucide="boxes"></i></span>
+        <span class="eyebrow">Executive Summary</span>
+        <h1>Blockchain Integration Service &amp; Dashboard</h1>
+        <p class="deck-subtitle">Documentation of the custodial platform as it exists today</p>
+        <p class="audience">Prepared for leadership — no code literacy required</p>
+        <hr class="accent-bar">
+        <span class="brand-lockup"><i data-lucide="zap"></i> Blitzy</span>
+      </section>
+
+      <!-- ================= SLIDE 2 — WHAT WE DOCUMENTED ================= -->
+      <section>
+        <span class="eyebrow">Scope</span>
+        <h2>What We Documented</h2>
+        <ul>
+          <li>A complete documentation set for the on-disk Go&nbsp;+&nbsp;React custodial blockchain platform.</li>
+          <li>Architecture, APIs, data model, observability, deployment, and security.</li>
+          <li>Reconciles the aspirational design against the early-stage reality.</li>
+          <li>Packaged for both engineering and executive audiences.</li>
+        </ul>
+        <div class="icon-row">
+          <div><i data-lucide="layers"></i><span>Architecture</span></div>
+          <div><i data-lucide="book-open"></i><span>API Reference</span></div>
+          <div><i data-lucide="shield"></i><span>Security</span></div>
+          <div><i data-lucide="activity"></i><span>Observability</span></div>
+        </div>
+      </section>
+
+      <!-- ================= SLIDE 3 — BY THE NUMBERS (KPI GRID) ================= -->
+      <section>
+        <span class="eyebrow">Headline Findings</span>
+        <h2>By the Numbers</h2>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-icon"><i data-lucide="file-text"></i></span>
+            <span class="kpi-value">62</span>
+            <span class="kpi-label">Repository files reviewed</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-icon"><i data-lucide="network"></i></span>
+            <span class="kpi-value">18</span>
+            <span class="kpi-label">REST endpoints documented</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-icon"><i data-lucide="database"></i></span>
+            <span class="kpi-value">5</span>
+            <span class="kpi-label">Core data entities</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-icon"><i data-lucide="boxes"></i></span>
+            <span class="kpi-value">5</span>
+            <span class="kpi-label">Product features</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-icon"><i data-lucide="activity"></i></span>
+            <span class="kpi-value">5</span>
+            <span class="kpi-label">Observability pillars</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-icon"><i data-lucide="alert-triangle"></i></span>
+            <span class="kpi-value">12</span>
+            <span class="kpi-label">Defects documented honestly</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SLIDE 4 — DIVIDER: ARCHITECTURE ================= -->
+      <section class="slide-divider">
+        <span class="hero-icon"><i data-lucide="network"></i></span>
+        <span class="eyebrow">Act One</span>
+        <h2>Architecture</h2>
+      </section>
+
+      <!-- ================= SLIDE 5 — CURRENT SCAFFOLD (Fig A1) ================= -->
+      <section>
+        <span class="eyebrow">Before</span>
+        <h2>Current Implemented Scaffold</h2>
+        <p class="fig-caption"><strong>Figure A1</strong> maps the backend as wired today: the request path
+          (router&nbsp;&rarr;&nbsp;services&nbsp;&rarr;&nbsp;database) is implemented, while dashed boxes mark
+          packages that are imported but absent and the wiring that breaks startup.</p>
+        <pre class="mermaid">
+flowchart TD
+    subgraph Legend_A1["Legend"]
+        L1["Solid box = implemented package"]
+        L2["Dashed box = imported but ABSENT / broken wiring"]
+    end
+    Client["HTTP Client / Frontend"] --> Router["internal/api routes + handlers (implemented)"]
+    Router --> Core["internal/core: vault, transaction, signature (implemented)"]
+    Core --> DB["internal/db: postgres.go, redis.go, schema.go (implemented)"]
+    Main["cmd/server/main.go (composition root)"] -.->|"SetupRouter 4 args vs 0 args"| Router
+    Main -.-> Cfg["internal/config (ABSENT)"]
+    Main -.-> Log["pkg/logger (ABSENT)"]
+    Main -.-> BC["internal/blockchain (ABSENT)"]
+    Main -.-> Cust["internal/custodian (ABSENT)"]
+    Core -.-> Tasks["internal/tasks tickers (panic: interval=0)"]
+        </pre>
+      </section>
+
+      <!-- ================= SLIDE 6 — DESIGNED TARGET (Fig A2) ================= -->
+      <section>
+        <span class="eyebrow">After</span>
+        <h2>Designed Target Architecture</h2>
+        <p class="fig-caption"><strong>Figure A2</strong> shows the fully-wired target: it adds the configuration,
+          logging, blockchain, and custodian packages and corrects the router and settlement-ticker wiring.</p>
+        <pre class="mermaid">
+flowchart TD
+    subgraph Legend_A2["Legend"]
+        M1["Solid box = target implemented component"]
+        M2["Solid arrow = runtime dependency"]
+    end
+    Client["HTTP Client / Frontend"] --> Router["internal/api (router + middleware + correlation ID)"]
+    Router --> Core["internal/core services"]
+    Core --> Ports["Ports: BlockchainClient, CustodianClient"]
+    Ports --> BC["internal/blockchain (XRP, Ethereum)"]
+    Ports --> Cust["internal/custodian (Utxo Custodian)"]
+    Core --> DB["internal/db (PostgreSQL + Redis)"]
+    Core --> Tasks["internal/tasks (configured tickers)"]
+    Tasks --> Kafka["Kafka fan-out (designed)"]
+    Main["cmd/server/main.go"] --> Cfg["internal/config (Viper)"]
+    Main --> Log["pkg/logger (Logrus + correlation IDs)"]
+    Main --> Router
+        </pre>
+      </section>
+
+      <!-- ================= SLIDE 7 — WHAT'S REAL TODAY (STATUS TABLE) ================= -->
+      <section>
+        <span class="eyebrow">Honest Status</span>
+        <h2>What's Real Today</h2>
+        <p class="fig-caption">Every capability is labeled by maturity: <strong>Implemented</strong> runs today,
+          <strong>Provisioned</strong> is present but mis-wired, <strong>Designed</strong> is planned and absent.</p>
+        <table>
+          <thead>
+            <tr><th>Capability</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>REST routing &amp; request handlers</td><td><span class="pill pill-impl">Implemented</span></td></tr>
+            <tr><td>Core services &amp; database layer</td><td><span class="pill pill-impl">Implemented</span></td></tr>
+            <tr><td>Background settlement &amp; signature processors</td><td><span class="pill pill-prov">Provisioned</span></td></tr>
+            <tr><td>Blockchain, custodian, config &amp; logging packages</td><td><span class="pill pill-designed">Designed</span></td></tr>
+            <tr><td>Kafka event fan-out</td><td><span class="pill pill-designed">Designed</span></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ================= SLIDE 8 — DATA MODEL (TABLE) ================= -->
+      <section>
+        <span class="eyebrow">Data Model</span>
+        <h2><span class="kpi-icon" style="vertical-align:-0.15em;margin-right:.3em"><i data-lucide="database"></i></span>The Domain in Five Entities</h2>
+        <table>
+          <thead>
+            <tr><th>Entity</th><th>Purpose</th><th>Key relationships</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Organization</td><td>Tenant boundary</td><td>Has many Users and Vaults</td></tr>
+            <tr><td>User</td><td>Operator identity</td><td>Belongs to an Organization; owns Transactions &amp; Signatures</td></tr>
+            <tr><td>Vault</td><td>Custodial wallet</td><td>Has many Transactions &amp; Signatures</td></tr>
+            <tr><td>Transaction</td><td>Blockchain transfer</td><td>Belongs to a Vault &amp; User; amount stored as precise decimal</td></tr>
+            <tr><td>Signature</td><td>Signing artifact</td><td>Belongs to a Vault &amp; User</td></tr>
+          </tbody>
+        </table>
+        <p class="fig-caption">A documented data-model cleanup item: each entity carries two identifiers, flagged for engineering follow-up.</p>
+      </section>
+
+      <!-- ================= SLIDE 9 — DIVIDER: PROCESSING & OPERATIONS ================= -->
+      <section class="slide-divider">
+        <span class="hero-icon"><i data-lucide="workflow"></i></span>
+        <span class="eyebrow">Act Two</span>
+        <h2>Processing &amp; Operations</h2>
+      </section>
+
+      <!-- ================= SLIDE 10 — ASYNC SETTLEMENT (Fig-Async) ================= -->
+      <section>
+        <span class="eyebrow">Data Flow</span>
+        <h2>How Transactions Settle</h2>
+        <p class="fig-caption">The <strong>asynchronous settlement flow</strong> splits fast request handling from
+          background settlement. The create path is implemented; the automatic settlement step is currently blocked by a
+          startup wiring defect the documentation flags for the team.</p>
+        <pre class="mermaid">
+flowchart LR
+    subgraph Legend_Async["Legend"]
+        LA1["Solid = implemented path"]
+        LA2["Dashed = blocked today (interval=0 panic)"]
+    end
+    API["POST /transactions/create"] --> Save["Persist Transaction (status = Pending)"]
+    Save --> Queue["Awaiting settlement"]
+    Queue -.->|"ticker interval uninitialized"| Proc["Ticker processor (StartTransactionProcessor)"]
+    Proc --> Update["Update status = Processed"]
+    Update --> Cache["Cache to Redis (tx:&amp;lt;id&amp;gt;)"]
+        </pre>
+      </section>
+
+      <!-- ================= SLIDE 11 — RISKS & MITIGATIONS (TABLE) ================= -->
+      <section>
+        <span class="eyebrow">Risk Posture</span>
+        <h2>Known Gaps, Documented Honestly</h2>
+        <table>
+          <thead>
+            <tr><th>Risk</th><th>Mitigation</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Startup wiring defects — router signature <code>SetupRouter()</code>, ticker <code>time.NewTicker(0)</code></td><td>Documented with exact locations for engineering follow-up</td></tr>
+            <tr><td>API path disagreement across layers — <code>/vault</code> vs <code>/vaults</code></td><td>Reconciled in the API reference</td></tr>
+            <tr><td>Outdated project README — wrong stack, dead links</td><td>Corrected, with navigation to the new docs</td></tr>
+          </tbody>
+        </table>
+        <div class="icon-row">
+          <div><i data-lucide="alert-triangle"></i><span>Identified</span></div>
+          <div><i data-lucide="git-branch"></i><span>Reconciled</span></div>
+          <div><i data-lucide="check-circle"></i><span>Corrected</span></div>
+        </div>
+      </section>
+
+      <!-- ================= SLIDE 12 — OBSERVABILITY (Fig O1) ================= -->
+      <section>
+        <span class="eyebrow">Operations</span>
+        <h2>Observability: Reused vs. Added</h2>
+        <p class="fig-caption"><strong>Figure O1</strong> contrasts what emits today with the five designed pillars —
+          structured logging with correlation IDs, distributed tracing, a <code>/metrics</code> endpoint,
+          health/readiness checks, and a dashboard template.</p>
+        <pre class="mermaid">
+flowchart LR
+    subgraph Legend_O1["Legend"]
+        LG1["Solid box = implemented / emitting today"]
+        LG2["Dashed box = imported but ABSENT (does not compile)"]
+        LG3["Rounded box = Designed / added (absent today)"]
+    end
+    subgraph Current["Current - Implemented (emission-only today)"]
+        direction TB
+        C_API["Gin router: gin.Logger() + gin.Recovery()"]
+        C_WORK["Task workers: logger.Error(...) structured logs"]
+        C_FE["Frontend: console.* logs"]
+        C_PING["Liveness: db.Ping() + redisClient.Ping(ctx)"]
+        C_LOGGER["pkg/logger (imported, ABSENT)"]
+        C_API --> C_STDOUT["stdout / container logs (no aggregation)"]
+        C_WORK --> C_STDOUT
+        C_WORK -.->|"depends on"| C_LOGGER
+    end
+    subgraph Designed["Designed - Target (added, absent today)"]
+        direction TB
+        D_MW(["Correlation-ID middleware"])
+        D_TRACE(["OpenTelemetry distributed tracing"])
+        D_METRICS(["/metrics endpoint (Prometheus)"])
+        D_HEALTH(["/health + /ready + Dockerfile HEALTHCHECK"])
+        D_AGG(["Log aggregation (CloudWatch / Loki)"])
+        D_ALERT(["Alerting: error rate, settlement lag, health"])
+        D_DASH(["Dashboard: dashboard-template.json"])
+        D_MW --> D_AGG
+        D_TRACE --> D_DASH
+        D_METRICS --> D_DASH
+        D_HEALTH --> D_ALERT
+        D_AGG --> D_DASH
+        D_DASH --> D_ALERT
+    end
+    Current ==>|"gaps closed by design"| Designed
+        </pre>
+      </section>
+
+      <!-- ================= SLIDE 13 — DEPLOYMENT TOPOLOGY (Fig O2) ================= -->
+      <section>
+        <span class="eyebrow">Where It Runs</span>
+        <h2>Deployment Topology</h2>
+        <p class="fig-caption"><strong>Figure O2</strong> shows the AWS target — ECS Fargate behind an ALB, with RDS
+          PostgreSQL, ElastiCache Redis, MSK Kafka, and S3. Dashed boxes are resources referenced but not yet defined.</p>
+        <pre class="mermaid">
+flowchart TD
+    subgraph Legend_O2["Legend"]
+        LG1["Solid box = resource DEFINED in main.tf"]
+        LG2["Dashed box = resource REFERENCED but NOT defined"]
+    end
+    User["Internet Client / Browser"] --> R53["Route53 A record (alias to ALB)"]
+    R53 --> ALB["ALB aws_lb.main (internet-facing)"]
+    ALB --> LHTTP["Listener :80 (redirect 301 to :443)"]
+    ALB --> LHTTPS["Listener :443 (forward)"]
+    LHTTPS --> SVC["ECS Service 'web' (Fargate, port 80)"]
+    SVC --> CL["ECS Cluster aws_ecs_cluster.main"]
+    SVC --> RDS["RDS PostgreSQL (multi_az)"]
+    SVC --> REDIS["ElastiCache Redis (:6379)"]
+    SVC --> KAFKA["MSK Kafka cluster"]
+    SVC --> S3["S3 buckets (data + logs)"]
+    LHTTPS -.-> TG["aws_lb_target_group.web (ABSENT)"]
+    SVC -.-> TD["aws_ecs_task_definition.web (ABSENT)"]
+    RDS -.-> SGPG["aws_security_group.postgresql (ABSENT)"]
+    REDIS -.-> SNG["aws_elasticache_subnet_group.redis (ABSENT)"]
+    REDIS -.-> SGR["aws_security_group.redis (ABSENT)"]
+    KAFKA -.-> SGK["aws_security_group.kafka (ABSENT)"]
+    SVC -.-> IAM["IAM role / CloudWatch logs (ABSENT)"]
+        </pre>
+      </section>
+
+      <!-- ================= SLIDE 14 — DIVIDER: SECURITY & READINESS ================= -->
+      <section class="slide-divider">
+        <span class="hero-icon"><i data-lucide="shield"></i></span>
+        <span class="eyebrow">Act Three</span>
+        <h2>Security &amp; Readiness</h2>
+      </section>
+
+      <!-- ================= SLIDE 15 — SECURE BY DESIGN ================= -->
+      <section>
+        <span class="eyebrow">Security &amp; Business Value</span>
+        <h2>Secure by Design</h2>
+        <ul>
+          <li>Role-based access control across five roles — Admin, Manager, Operator, Auditor, API User.</li>
+          <li>JWT access tokens (15-minute) with refresh.</li>
+          <li>Multi-factor authentication.</li>
+          <li>Encryption at rest and in transit, with audit logging.</li>
+        </ul>
+        <div class="icon-row">
+          <div><i data-lucide="lock"></i><span>Encryption</span></div>
+          <div><i data-lucide="key"></i><span>JWT + MFA</span></div>
+          <div><i data-lucide="shield"></i><span>RBAC</span></div>
+        </div>
+        <p class="designed-note"><strong>Designed goals</strong> — 99.99% uptime, 10,000 requests/second, and
+          sub-100ms p95 latency are stated targets, not delivered results.</p>
+      </section>
+
+      <!-- ================= SLIDE 16 — CLOSING ================= -->
+      <section class="slide-closing">
+        <span class="eyebrow">The Takeaway</span>
+        <h2>Documented. Honest. Ready to Build.</h2>
+        <ul>
+          <li>Engineering resolves the flagged startup wiring defects.</li>
+          <li>Continue toward the designed target architecture.</li>
+          <li>Optionally publish the documentation site.</li>
+        </ul>
+        <hr class="accent-bar">
+        <span class="brand-lockup"><i data-lucide="check-circle"></i> Blitzy</span>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       Third-party libraries — pinned CDN versions (reveal.js 5.1.0, Lucide 0.460.0).
+       Classic scripts run during parsing, so the Reveal and lucide globals are
+       available before the deferred ES module below executes.
+       ========================================================================== -->
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+
+  <!-- Initialization: Mermaid (ESM) + reveal.js + Lucide.
+       ES modules are deferred by default, so this runs after the classic scripts. -->
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.4.0/dist/mermaid.esm.min.mjs';
+
+    // Mermaid: manual rendering (startOnLoad:false), Blitzy 'base' theme variables.
+    // Two settings keep flowchart node labels from clipping:
+    //   * top-level fontFamily — the documented key that drives BOTH Mermaid's text
+    //     measurement and the .nodeLabel CSS it bakes into each SVG, so measured and
+    //     rendered widths use the same (Inter) font.
+    //   * flowchart.wrappingWidth — Mermaid caps single-line label boxes at this width
+    //     (default ~200px) expecting the text to wrap; our labels do not wrap, so the
+    //     default clips them. Raising it to 600px lets each label box grow to its full
+    //     single-line width (our widest label is ~430px). useMaxWidth then scales the
+    //     whole SVG to fit the slide.
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'base',
+      securityLevel: 'loose',
+      fontFamily: "'Inter', system-ui, sans-serif",
+      flowchart: {
+        htmlLabels: true,
+        useMaxWidth: true,
+        nodeSpacing: 45,
+        rankSpacing: 55,
+        wrappingWidth: 600
+      },
+      themeVariables: {
+        primaryColor: '#F2F0FE',
+        primaryTextColor: '#333333',
+        primaryBorderColor: '#5B39F3',
+        lineColor: '#999999',
+        secondaryColor: '#F4EFF6',
+        fontFamily: "'Inter', system-ui, sans-serif",
+        fontSize: '15px'
+      }
+    });
+
+    // reveal.js: authored for a 1920x1080 canvas.
+    Reveal.initialize({
+      hash: true,
+      transition: 'slide',
+      controlsTutorial: false,
+      width: 1920,
+      height: 1080
+    });
+
+    // Diagram rendering uses Mermaid 11's mermaid.run() on 'ready' and every
+    // 'slidechanged'. Two reveal.js behaviours must be accommodated:
+    //   1. reveal.js sets display:none on slides outside the view distance. Running
+    //      Mermaid against a display:none <pre> leaves dagre unable to measure text
+    //      (getBBox -> 0), yielding "translate(undefined, NaN)" transforms. We
+    //      therefore scope mermaid.run() to the CURRENTLY VISIBLE slide's not-yet-
+    //      processed nodes (lazy rendering) — visible nodes have real layout.
+    //   2. reveal.js applies transform:scale() to the canvas. Mermaid measures label
+    //      text in a sandbox it appends to document.body (an unscaled context) using
+    //      themeVariables.fontFamily (Inter). Because the deck also renders the injected
+    //      SVG labels in Inter (see the .reveal .mermaid font-family safeguard), the
+    //      measured and rendered fonts match, so node boxes are sized correctly and
+    //      label text never clips. Mermaid marks processed nodes with data-processed,
+    //      so re-invoking run() is safe and idempotent.
+    const runMermaidForCurrentSlide = async () => {
+      const current = Reveal.getCurrentSlide();
+      if (!current) return;
+      const nodes = Array.from(current.querySelectorAll('pre.mermaid'))
+        .filter((n) => n.getAttribute('data-processed') !== 'true');
+      if (nodes.length === 0) return;
+      try {
+        await mermaid.run({ nodes });
+      } catch (err) {
+        console.error('Mermaid run error:', err);
+      }
+    };
+
+    const renderIcons = () => {
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons();
+      }
+    };
+
+    // Render the current slide's diagram(s) + all icons once the deck is ready, and
+    // again on every slide change (reveal.js reflows the DOM as slides enter/leave the
+    // view distance, so icons must be re-materialised and lazily-shown diagrams drawn).
+    Reveal.on('ready', () => { runMermaidForCurrentSlide(); renderIcons(); });
+    Reveal.on('slidechanged', () => { runMermaidForCurrentSlide(); renderIcons(); });
+  </script>
+</body>
+</html>
