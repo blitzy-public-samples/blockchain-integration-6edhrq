@@ -512,6 +512,21 @@
 
     /* Two-up layout for a diagram beside a short caption when useful */
     .reveal .slides section h2 + .fig-caption { margin-top: -0.2em; }
+
+    /* -----------------------------------------------------------------------
+     * 12. Accessibility — visible keyboard focus ring for reveal.js navigation
+     *     controls (QA INFO-1). reveal.js ships outline:none on these buttons;
+     *     :focus-visible restores a brand-token ring for keyboard users only,
+     *     leaving pointer interaction and the resting appearance unchanged.
+     *     Brand tokens only — no hardcoded colours. Mirrors section 8 of
+     *     blitzy-deck/references/blitzy-reveal-theme.css.
+     * ------------------------------------------------------------------------- */
+    .reveal .controls button:focus-visible {
+      outline: 3px solid var(--blitzy-primary);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 5px var(--blitzy-accent-teal);
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body>
@@ -820,7 +835,7 @@ flowchart TD
         <span class="eyebrow">Security &amp; Business Value</span>
         <h2>Secure by Design</h2>
         <ul>
-          <li>Role-based access control across five roles — Admin, Manager, Operator, Auditor, API User.</li>
+          <li>Role-based access control across five roles.</li>
           <li>JWT access tokens (15-minute) with refresh.</li>
           <li>Multi-factor authentication.</li>
           <li>Encryption at rest and in transit, with audit logging.</li>
@@ -831,7 +846,7 @@ flowchart TD
           <div><i data-lucide="shield"></i><span>RBAC</span></div>
         </div>
         <p class="designed-note"><strong>Designed goals</strong> — 99.99% uptime, 10,000 requests/second, and
-          sub-100ms p95 latency are stated targets, not delivered results.</p>
+          sub-100ms p95 latency are targets, not delivered.</p>
       </section>
 
       <!-- ================= SLIDE 16 — CLOSING ================= -->

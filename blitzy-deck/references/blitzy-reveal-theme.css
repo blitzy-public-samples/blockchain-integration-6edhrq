@@ -373,3 +373,18 @@
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.18);
 }
+
+/* ---------------------------------------------------------------------------
+ * 8. Accessibility  —  visible keyboard focus ring for reveal.js nav controls
+ *    reveal.js applies outline:none to its navigation arrow buttons, leaving
+ *    keyboard users without a visible focus indicator (QA INFO-1). :focus-visible
+ *    restores a brand-token ring for keyboard navigation only; pointer clicks and
+ *    the resting appearance are unaffected. Brand tokens only — no hardcoded
+ *    colours. Mirrored verbatim in the deck's inline <style>.
+ * ------------------------------------------------------------------------- */
+.reveal .controls button:focus-visible {
+  outline: 3px solid var(--blitzy-primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px var(--blitzy-accent-teal);
+  border-radius: 6px;
+}
