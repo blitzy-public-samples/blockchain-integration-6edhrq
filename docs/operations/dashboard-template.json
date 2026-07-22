@@ -1,0 +1,152 @@
+{
+  "__doc__": "Observability dashboard TEMPLATE for the Blockchain Integration Service and Dashboard. Grafana-compatible dashboard model (schemaVersion 39). MATURITY: this template is DESIGNED. Panels marked 'Designed' depend on capabilities that are absent today (correlation-ID middleware, OpenTelemetry tracing, /metrics, /health, /ready). Panels marked 'Implemented (reused)' bind to signals that are emitted today (gin.Logger/gin.Recovery access+panic logs; tasks logger.Error worker logs to stdout), with the caveat that pkg/logger is imported but absent (Source: backend/cmd/server/main.go:L10). See docs/operations/observability.md (Fig O1) and docs/operations/runbook.md. Grounded in documentation/Technical Specifications.md (THIRD-PARTY SERVICES: Amazon CloudWatch) and AAP Observability rule (0.10.3).",
+  "annotations": {
+    "list": [
+      {
+        "name": "Deployments",
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["blockchain-integration", "observability", "template"],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource_metrics",
+        "label": "Metrics datasource (Prometheus)",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "datasource_logs",
+        "label": "Logs datasource (Loki/CloudWatch)",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Blockchain Integration Service - Observability (Template)",
+  "uid": "blockchain-integration-observability",
+  "version": 1,
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Service Health (Designed)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Liveness /health (Designed)",
+      "description": "Maturity: Designed. Binds to a /health endpoint that does not exist yet (Source: backend/internal/api/routes.go:L9-L54 defines no health route). Also needs a Dockerfile HEALTHCHECK (Source: infrastructure/docker/Dockerfile.backend:L20 - absent).",
+      "datasource": { "type": "prometheus", "uid": "${datasource_metrics}" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "mappings": [{ "type": "value", "options": { "1": { "text": "UP", "color": "green" }, "0": { "text": "DOWN", "color": "red" } } }], "unit": "short" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "up{job=\"blockchain-backend\"}" }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Readiness /ready - PostgreSQL + Redis (Designed)",
+      "description": "Maturity: Designed. A /ready check should assert DB and cache reachability. Liveness primitives already exist to build on: db.Ping (Source: backend/internal/db/postgres.go:L27) and redisClient.Ping (Source: backend/internal/db/redis.go:L21).",
+      "datasource": { "type": "prometheus", "uid": "${datasource_metrics}" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "fieldConfig": { "defaults": { "mappings": [{ "type": "value", "options": { "1": { "text": "READY", "color": "green" }, "0": { "text": "NOT READY", "color": "red" } } }] }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "blockchain_ready{component=~\"postgres|redis\"}" }]
+    },
+    {
+      "id": 4,
+      "type": "row",
+      "title": "API Traffic (Designed - requires /metrics)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "collapsed": false
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "HTTP Request Rate by route (Designed)",
+      "description": "Maturity: Designed. Requires a /metrics endpoint exporting Gin request counters; no /metrics route exists today (Source: backend/internal/api/routes.go:L9-L54). The 18 routes are grouped under /auth, /vault, /transactions, /signatures (Source: backend/internal/api/routes.go:L17-L52).",
+      "datasource": { "type": "prometheus", "uid": "${datasource_metrics}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "sum by (route) (rate(http_requests_total[5m]))", "legendFormat": "{{route}}" }]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "HTTP p95 Latency (Designed)",
+      "description": "Maturity: Designed. Requires /metrics request-duration histograms (absent). Target capacity per design is 10,000 req/s (Source: documentation/Technical Specifications.md:SYSTEM OVERVIEW).",
+      "datasource": { "type": "prometheus", "uid": "${datasource_metrics}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket[5m])))", "legendFormat": "p95 {{route}}" }]
+    },
+    {
+      "id": 7,
+      "type": "row",
+      "title": "Background Workers (Implemented emission / Designed metrics)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "collapsed": false
+    },
+    {
+      "id": 8,
+      "type": "logs",
+      "title": "Worker Errors - transaction + signature processors (Implemented, reused)",
+      "description": "Maturity: Implemented (reused, emission-only). Binds to structured worker logs emitted via logger.Error in the processors (Source: backend/internal/tasks/transaction_processor.go:L26,L44,L50,L57; backend/internal/tasks/signature_processor.go:L25,L42,L48,L53,L57). Caveat: pkg/logger is imported but absent (Source: backend/cmd/server/main.go:L10), and there is no aggregation today - logs go to stdout.",
+      "datasource": { "type": "loki", "uid": "${datasource_logs}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "options": { "showLabels": true, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
+      "targets": [{ "refId": "A", "expr": "{job=\"blockchain-backend\"} |= \"level=error\" | logfmt" }]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Settlement Lag - pending transaction age (Designed)",
+      "description": "Maturity: Designed. Approximates time transactions remain in status Pending before the transaction processor moves them to Processed (Source: backend/internal/core/transaction/service.go:L46,L81). The processor cannot run today: transactionCheckInterval is uninitialized so time.NewTicker(0) panics (Source: backend/internal/tasks/transaction_processor.go:L13-L16). See runbook.md.",
+      "datasource": { "type": "prometheus", "uid": "${datasource_metrics}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 300 }] } }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "max(blockchain_transaction_pending_age_seconds)" }]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Signature Processor Poll Interval (Implemented = 5m)",
+      "description": "Maturity: Implemented. The signature processor polls on a fixed 5-minute ticker (Source: backend/internal/tasks/signature_processor.go:L13 const signatureCheckInterval = 5 * time.Minute). Shown for reference; a Designed metric would confirm last successful poll.",
+      "datasource": { "type": "prometheus", "uid": "${datasource_metrics}" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 23 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "blockchain_signature_poll_interval_seconds" }]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Distributed Trace Error Rate (Designed)",
+      "description": "Maturity: Designed. Requires OpenTelemetry tracing across service boundaries (absent today). Would surface cross-service error spans (handler -> core service -> custodian/blockchain adapters). See Fig O1 in observability.md.",
+      "datasource": { "type": "prometheus", "uid": "${datasource_metrics}" },
+      "gridPos": { "h": 4, "w": 18, "x": 6, "y": 23 },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "sum(rate(traces_spanmetrics_calls_total{status_code=\"STATUS_CODE_ERROR\"}[5m])) / sum(rate(traces_spanmetrics_calls_total[5m]))" }]
+    }
+  ]
+}
