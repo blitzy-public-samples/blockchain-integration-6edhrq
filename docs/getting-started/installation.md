@@ -18,7 +18,7 @@ Install the following tooling before starting either track. The versions reflect
 | Tool | Version | Why | Source |
 |------|---------|-----|--------|
 | Go | `1.20` in CI; `1.17` in the backend Docker image (**discrepancy** — use Go 1.20+ locally to match CI) | Compile and run the Gin backend | `.github/workflows/backend-ci.yml:L17`, `infrastructure/docker/Dockerfile.backend:L2` |
-| Node.js + npm | `14.x` in CI; a supported LTS (**Node 18+**) recommended locally, since Node 14 is end-of-life | Build and run the CRA frontend | `.github/workflows/frontend-ci.yml:L17`, `frontend/package.json:L9-L13` |
+| Node.js + npm | `14.x` in CI; a supported LTS (**Node 22+**; Node 18 and 20 are now end-of-life) recommended locally, since the CI-pinned Node 14 is end-of-life | Build and run the CRA frontend | `.github/workflows/frontend-ci.yml:L17`, `frontend/package.json:L9-L13` |
 | PostgreSQL | Server version not pinned in code; reached through the `postgres`/`lib/pq` driver | Primary relational store (**Implemented**) | `backend/internal/db/postgres.go:L5,L15-L18` |
 | Redis | Server version not pinned in code; reached through `go-redis/v8` | Cache and async status store (**Implemented**) | `backend/internal/db/redis.go:L5,L11-L18` |
 

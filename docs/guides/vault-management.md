@@ -57,7 +57,7 @@ The frontend, the backend, and the design specification disagree on the vault re
 
 ## Troubleshooting
 
-**Creating a vault throws `setVaults is not defined`.** The page's `handleCreateVault` calls `setVaults(...)` after dispatching `createVault`, but no `setVaults` state setter is declared in the component (only the `vaults` selector exists) `Source: frontend/src/pages/VaultManagement.tsx:L44-L47`. This is a known scaffold defect (**Implemented defect**); the create dispatch itself succeeds, but the trailing local-state update references an undefined symbol. Documented, not fixed.
+**Creating a vault fails with `setVaults is not defined`.** The page's `handleCreateVault` calls `setVaults(...)` after dispatching `createVault`, but no `setVaults` state setter is declared in the component — `vaults` is read from a Redux selector, and the only local state setters are `setSelectedVault` and `setIsLoading` `Source: frontend/src/pages/VaultManagement.tsx:L28-L29,L44-L47`. This is a known scaffold defect (**Implemented defect**): the reference to the undefined `setVaults` symbol prevents the component from building, so the create flow cannot run and no runtime success is implied. Documented, not fixed.
 
 **Vault list is empty even after creating a vault.** Because of the resource-path discrepancy above, the plural `/vaults` client call `Source: frontend/src/services/api.ts:L34` does not match the singular `/vault/list` route `Source: backend/internal/api/routes.go:L28`. Verify which path the environment actually serves before assuming a data problem.
 
