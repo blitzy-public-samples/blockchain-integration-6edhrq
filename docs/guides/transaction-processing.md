@@ -31,11 +31,13 @@ The two statuses written by the code are `Pending` `Source: backend/internal/cor
 POST   /transactions/create
 GET    /transactions/list
 GET    /transactions/:id
+PUT    /transactions/:id
+DELETE /transactions/:id
 ```
 
 There is no `/api/v1` prefix in the router `Source: backend/internal/api/routes.go:L9-L54`. See [Transactions API Reference](../api-reference/transactions.md) for schemas.
 
-**Async settlement processor (Designed - does not start as-wired).** The background processor is intended to poll for pending transactions on a ticker and settle them `Source: backend/internal/tasks/transaction_processor.go:L15-L16`. As shipped it panics at startup (see Troubleshooting), so live settlement is **Designed** rather than runnable.
+**Async settlement processor (Designed - does not start as-wired).** The background processor is intended to poll for pending transactions on a ticker and settle them `Source: backend/internal/tasks/transaction_processor.go:L15-L16`. It does not run today: the backend does not compile, so the build fails first (the processor/router wiring mismatch, failure mode FM-4; see Troubleshooting). A latent zero-duration ticker panic is also present and would surface only after those compile blockers are resolved. Live settlement is therefore **Designed** rather than runnable, with the build failure - not the ticker panic - as the primary current blocker.
 
 ## Usage
 
@@ -56,11 +58,11 @@ The backend and frontend use different transaction status vocabularies:
 
 ## Troubleshooting
 
-**Backend panics at startup with a zero-duration ticker.** `transactionCheckInterval` is declared but never assigned, so it defaults to `0`; `time.NewTicker(transactionCheckInterval)` then receives `0` and panics `Source: backend/internal/tasks/transaction_processor.go:L13-L16`. This is a known **Implemented defect** and is the root cause of settlement not running. Detection and remediation are documented as failure mode FM-1 in the [Runbook](../operations/runbook.md). Documented, not fixed.
+**Latent zero-duration ticker panic.** `transactionCheckInterval` is declared but never assigned, so it defaults to `0`; `time.NewTicker(transactionCheckInterval)` would then receive `0` and panic `Source: backend/internal/tasks/transaction_processor.go:L13-L16`. This is a **latent** runtime defect: it is not observable today because the backend does not compile (the build fails first, failure mode FM-4), so the panic is reachable only once those compile blockers are resolved. The primary current blocker to settlement is therefore the build failure, not this panic. Detection and remediation are documented as failure mode FM-1 in the [Runbook](../operations/runbook.md). Documented, not fixed.
 
-**Processor and service signatures do not match.** The processor calls the settlement path as `ProcessTransaction(ctx, tx)` and reads `result.Status`, but the service defines `ProcessTransaction(id uuid.UUID) error` `Source: backend/internal/core/transaction/service.go:L65`, invoked from the processor at `Source: backend/internal/tasks/transaction_processor.go:L41`. This signature mismatch (**Implemented defect**) prevents the settlement loop from compiling as-wired. See failure mode FM-2 in the [Runbook](../operations/runbook.md).
+**Processor and service signatures do not match.** The processor calls the settlement path as `ProcessTransaction(ctx, tx)` and reads `result.Status`, but the service defines `ProcessTransaction(id uuid.UUID) error` `Source: backend/internal/core/transaction/service.go:L65`, invoked from the processor at `Source: backend/internal/tasks/transaction_processor.go:L41`. This signature mismatch (**Implemented defect**) prevents the settlement loop from compiling as-wired. See failure mode FM-4 in the [Runbook](../operations/runbook.md).
 
-**Transactions never leave `Pending`.** Because the processor cannot start (ticker panic) and its call site does not match the service signature, pending transactions are not advanced to `Processed`. Confirm the settlement processor is running before investigating data issues.
+**Transactions never leave `Pending`.** The settlement loop does not run today: the backend does not compile because the processor call site does not match the service signature (failure mode FM-4), and even once it built the transaction processor carries the latent ticker panic (failure mode FM-1). Pending transactions are therefore not advanced to `Processed`. Confirm the backend builds and the settlement processor is running before investigating data issues.
 
 **Cached results never expire.** The Redis write uses a TTL of `0` (no expiry) for `tx:<id>` entries `Source: backend/internal/tasks/transaction_processor.go:L55`; stale settlement results accumulate. Behavior is **Implemented**; documented as a caching caveat.
 
@@ -70,6 +72,6 @@ The backend and frontend use different transaction status vocabularies:
 
 - [Transactions API Reference](../api-reference/transactions.md) - endpoint contract for the five transaction routes.
 - [Data Flow](../architecture/data-flow.md) - `Fig B2 - Transaction Create + Async Settlement`.
-- [Runbook](../operations/runbook.md) - FM-1 (ticker panic) and FM-2 (settlement wiring) remediation.
+- [Runbook](../operations/runbook.md) - FM-1 (ticker panic) and FM-4 (processor/router wiring mismatch) remediation.
 - [Scaffold vs Design](../architecture/scaffold-vs-design.md) - status-vocabulary reconciliation.
 - [Documentation index](../index.md).
