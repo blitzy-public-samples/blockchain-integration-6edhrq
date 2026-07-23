@@ -158,7 +158,7 @@ flowchart LR
         LG2["Dashed arrow = designed / absent path"]
     end
     UI["React UI"] -->|"REST + JWT"| API["Gin Router + Handlers"]
-    UI -->|"WebSocket realtime"| API
+    UI -.->|"WebSocket realtime (client only; server Designed)"| API
     API --> Core["Core Services: vault / transaction / signature"]
     Core --> PG[("PostgreSQL")]
     Core --> RD[("Redis cache")]
@@ -172,7 +172,7 @@ flowchart LR
     Core -.->|"Designed adapter"| Cust["Utxo Custodian"]
 ```
 
-As the embedded `Legend_DF1` block in **Fig DF1** states, solid arrows are **Implemented** data paths and dashed arrows are **Designed** (or absent) paths. The **Implemented** paths are the ones exercised in **Fig B1**, **Fig B2**, and **Fig B3**: the React UI reaches the Gin router over REST with a JWT bearer token and over a WebSocket realtime channel; the router delegates to the core services; and the core services and the ticker processors read and write PostgreSQL and the Redis cache. `Source: backend/internal/api/routes.go:L9-L54`, `Source: frontend/src/services/websocket.ts`, `Source: backend/internal/tasks/transaction_processor.go:L34-L58`. The **Designed** paths are the Kafka fan-out from the processors, the Analytics/Reporting consumer that reads from it, and the blockchain (XRP / Ethereum) and Utxo custodian adapters that the core services depend on through the `BlockchainClient` and `CustodianClient` ports — none of which are present in the tree today. `Source: documentation/Technical Specifications.md:§DATA-FLOW DIAGRAM`, `Source: backend/internal/core/transaction/service.go:L7-L8`.
+As the embedded `Legend_DF1` block in **Fig DF1** states, solid arrows are **Implemented** data paths and dashed arrows are **Designed** (or absent) paths. The **Implemented** paths are the ones exercised in **Fig B1**, **Fig B2**, and **Fig B3**: the React UI reaches the Gin router over REST with a JWT bearer token; the router delegates to the core services; and the core services and the ticker processors read and write PostgreSQL and the Redis cache. `Source: backend/internal/api/routes.go:L9-L54`, `Source: backend/internal/tasks/transaction_processor.go:L34-L58`. The WebSocket realtime channel is drawn dashed because it is only half-built: a frontend `WebSocketService` client class is authored, but **no backend WebSocket route exists**, so the end-to-end channel is **Designed** on the server side and cannot carry data today. This matches the WebSocket realtime channel row of the reconciliation matrix — **Implemented-with-defects** (client) / **Designed** (server) — and the Designed/Absent band of **Fig SD1** in [`scaffold-vs-design.md`](scaffold-vs-design.md). `Source: frontend/src/services/websocket.ts:L1-L11`, `Source: backend/internal/api/routes.go:L9-L54`. The **Designed** paths are the Kafka fan-out from the processors, the Analytics/Reporting consumer that reads from it, and the blockchain (XRP / Ethereum) and Utxo custodian adapters that the core services depend on through the `BlockchainClient` and `CustodianClient` ports — none of which are present in the tree today. `Source: documentation/Technical Specifications.md:§DATA-FLOW DIAGRAM`, `Source: backend/internal/core/transaction/service.go:L7-L8`.
 
 ## Related Documentation
 

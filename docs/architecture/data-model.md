@@ -2,7 +2,7 @@
 
 The Blockchain Integration Service and Dashboard persists five entities — **Organization**, **User**, **Vault**, **Transaction**, and **Signature** — that model the custodial domain of organizations onboarding users who operate vaults to initiate transactions and request signatures. PostgreSQL is the system of record for all five entities. `Source: backend/internal/db/schema.go:L11-L68`, `Source: backend/internal/db/postgres.go:L1-L33`.
 
-The entity **structs are Implemented** (declared as Go/GORM models in code), while the **physical persistence wiring is Provisioned**: the models exist, but the `db` package initializes a `sqlx` connection and defines no GORM `AutoMigrate`, `Repository`, or migrations, so the structs are not yet bound to a live schema. `Source: backend/internal/db/postgres.go:L10-L18`.
+The entity **structs are Implemented** in the sense that they are declared as Go/GORM models in code — a *declared-in-source* status, not a claim that the model compiles or runs today. In fact, `schema.go` does not currently compile: it declares each `Metadata` field as `gorm.JSONMap`, a type that is **undefined in `gorm.io/gorm`** (Defect 4), so the entity structs cannot be built or exercised as-declared. `Source: backend/internal/db/schema.go:L39,L53,L65`. Separately, the **physical persistence wiring is Provisioned**: even setting the compile defect aside, the `db` package initializes a `sqlx` connection and defines no GORM `AutoMigrate`, `Repository`, or migrations, so the structs are not yet bound to a live schema. `Source: backend/internal/db/postgres.go:L10-L18`. The full defect catalog and cross-page reconciliation live in [`scaffold-vs-design.md`](scaffold-vs-design.md).
 
 ## Maturity Legend
 
@@ -92,7 +92,7 @@ Mermaid `erDiagram` does not support an in-diagram legend, so the notation is ex
 
 ## Entity Field Reference
 
-Each of the five entities is a GORM struct that embeds `gorm.Model` and then redeclares a UUID `ID` together with `CreatedAt`/`UpdatedAt`. The tables below reproduce every field exactly as declared — Go field name, Go type, key/constraint, and notes — with no invented fields.
+Each of the five entities is a GORM struct that embeds `gorm.Model` and then redeclares a UUID `ID` together with `CreatedAt`/`UpdatedAt`. The **(Implemented)** tag on each entity heading below denotes *declared-in-source* status — the struct is written in code — and not that it compiles or runs today; as noted above and in the [Gap Notes](#gap-notes), `schema.go` does not currently compile because `Metadata gorm.JSONMap` is an undefined type in `gorm.io/gorm` (Defect 4). The tables below reproduce every field exactly as declared — Go field name, Go type, key/constraint, and notes — with no invented fields. `Source: backend/internal/db/schema.go:L39,L53,L65`.
 
 ### Organization (Implemented)
 
@@ -177,7 +177,7 @@ Each of the five entities is a GORM struct that embeds `gorm.Model` and then red
 
 - **`Transaction.Amount` is `decimal.Decimal`.** Monetary amounts use arbitrary-precision decimals rather than floating-point, which avoids the rounding errors inherent to `float` types when representing currency. `Source: backend/internal/db/schema.go:L52`.
 - **`Signature.RawSignature` is a `string`.** It holds the raw signature material returned by the custodian for the signing request. `Source: backend/internal/db/schema.go:L64`.
-- **`Metadata` is `gorm.JSONMap` (JSONB).** Vault, Transaction, and Signature each carry a `Metadata` column persisted as JSONB, enabling free-form key/value attributes without schema changes. `Source: backend/internal/db/schema.go:L39,L53,L65`.
+- **`Metadata` is declared as `gorm.JSONMap` (intended as a JSONB column) — but this type is undefined in `gorm.io/gorm`.** Vault, Transaction, and Signature each declare a `Metadata` field intended to persist free-form key/value attributes as JSONB without schema changes; however, `gorm.JSONMap` does not exist in `gorm.io/gorm`, so `schema.go` does not compile as-declared (Defect 4 in [`scaffold-vs-design.md`](scaffold-vs-design.md)). The JSONB behavior is therefore **Designed**, not functional today. `Source: backend/internal/db/schema.go:L39,L53,L65`.
 
 ## Relationships
 
@@ -195,6 +195,10 @@ The six relationships depicted in **Fig M1 — Data Model ERD** are all one-to-m
 ## Gap Notes
 
 The following model-level gaps are **documented honestly and are not fixed** by this deliverable; they describe the current state of the code as-declared. Each is expanded in [`scaffold-vs-design.md`](scaffold-vs-design.md).
+
+### Undefined `gorm.JSONMap` type — schema does not compile (Implemented defect)
+
+Every entity that carries a `Metadata` column declares it as `gorm.JSONMap`, but `gorm.JSONMap` is an **undefined type in `gorm.io/gorm`**. Because the type does not exist in the imported package, `schema.go` does not compile, and consequently none of the five entity structs can be built or exercised as-declared today. This is the compile-blocking defect catalogued as **Defect 4** in [`scaffold-vs-design.md`](scaffold-vs-design.md); the dual-identifier conflict below likewise cannot be exercised until it is resolved. `Source: backend/internal/db/schema.go:L39,L53,L65`.
 
 ### Dual-identifier inconsistency (Implemented defect)
 
