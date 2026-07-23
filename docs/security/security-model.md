@@ -12,7 +12,7 @@ Every control on this page is tagged with the project-wide maturity discipline u
 
 Read this page with one fact in front of mind: **most authentication and authorization controls are currently `Designed`.** The router references an authentication middleware package and the login handler depends on an authentication service package, but **both packages are imported and never defined** — so token validation, JWT issuance, and RBAC enforcement do not run today. `Source: backend/internal/api/routes.go:L6`, `Source: backend/internal/api/handlers/auth.go:L5`. The consolidated defect catalog that reconciles the design corpus against the on-disk scaffold is maintained in [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md).
 
-**Referenced from.** This page is linked from the documentation home ([`../index.md`](../index.md)) and the root project readme ([`../../README.md`](../../README.md)), and it complements the authentication endpoint reference ([`../api-reference/authentication.md`](../api-reference/authentication.md)) and the architecture documentation.
+**Referenced from.** Once the documentation home and root-navigation pages are in place, this page will be linked from the documentation home (`../index.md`, not yet created) and the root project README ([`../../README.md`](../../README.md)); today it complements the authentication endpoint reference ([`../api-reference/authentication.md`](../api-reference/authentication.md)) and the architecture documentation.
 
 The end-to-end authentication and authorization flow — contrasting what is implemented today with the designed target — is shown in **Fig S1 — Authentication & Authorization Flow (Current Implemented vs Designed)**.
 
@@ -43,13 +43,13 @@ flowchart TD
 
 ## Authentication
 
-Authentication follows a bearer-token model. A client authenticates by sending `POST /auth/login` with a JSON body containing `username` and `password` (both bound with `binding:"required"`); on success the handler returns `200` with a `{ "token": <jwt> }` body, and clients then present that token as an `Authorization: Bearer <token>` header on every secured request. `Source: backend/internal/api/handlers/auth.go:L21-L39`. The `POST /auth/logout` route reads the caller's `userID` from the request context and invalidates the session, and it is token-protected by the authentication middleware; `POST /auth/register` is routed but **Designed**, because no `Register` method is defined on the handler. `Source: backend/internal/api/handlers/auth.go:L41-L55`, `Source: backend/internal/api/routes.go:L17-L22`, `Source: backend/internal/api/handlers/auth.go` (no `Register`). The full request/response reference — fields, status codes, and examples for all three endpoints — lives in the [authentication API reference](../api-reference/authentication.md) and is not duplicated here.
+Authentication follows a bearer-token model. A client authenticates by sending `POST /auth/login` with a JSON body containing `username` and `password` (both bound with `binding:"required"`); on success the handler returns `200` with a `{ "token": <jwt> }` body, and clients then present that token as an `Authorization: Bearer <token>` header on every secured request. `Source: backend/internal/api/handlers/auth.go:L21-L39`. The `POST /auth/logout` route reads the caller's `userID` from the request context and invalidates the session, and it would be token-protected by the authentication middleware — but that middleware is **Designed** (imported but absent today), so no such protection runs at runtime; `POST /auth/register` is routed but **Designed**, because no `Register` method is defined on the handler. `Source: backend/internal/api/handlers/auth.go:L41-L55`, `Source: backend/internal/api/routes.go:L17-L22`, `Source: backend/internal/api/handlers/auth.go` (no `Register`). The full request/response reference — fields, status codes, and examples for all three endpoints — lives in the [authentication API reference](../api-reference/authentication.md) and is not duplicated here.
 
 The **login and logout handlers are Implemented**, but the token they hand out is not: both delegate to `authService`, an instance of `auth.AuthService` imported from `backend/internal/core/auth`, a package that is **imported but absent from the codebase**. Actual JWT issuance is therefore **Designed**. `Source: backend/internal/api/handlers/auth.go:L5`, `Source: backend/internal/api/handlers/auth.go:L32`.
 
 ### JSON Web Tokens and Session Handling
 
-The design corpus specifies JWTs for user sessions with a **short access-token expiration of 15 minutes backed by a refresh-token mechanism**. This is **Designed**: no token generation, signing, expiry, or refresh logic is present in the readable code, since it belongs to the absent `core/auth` package. `Source: documentation/Technical Specifications.md:L490-L492`, `Source: backend/internal/api/handlers/auth.go:L5`. Session management — including inactivity timeout and forced logout under feature UA-001-4 — is likewise **Designed**. `Source: documentation/Software Requirements Specifications (SRS).md:L431`.
+The design corpus specifies JWTs for user sessions with a **short access-token expiration of 15 minutes backed by a refresh-token mechanism**. This is **Designed**: no token generation, signing, expiry, or refresh logic is present in the readable code, since it belongs to the absent `core/auth` package. `Source: documentation/Technical Specifications.md:L480-L482`, `Source: backend/internal/api/handlers/auth.go:L5`. Session management — including inactivity timeout and forced logout under feature UA-001-4 — is likewise **Designed**. `Source: documentation/Software Requirements Specifications (SRS).md:L431`.
 
 ### Frontend Token Handling
 
@@ -64,7 +64,7 @@ The paired **response interceptor is a stub**: it carries a documented `HUMAN AS
 
 ### API Key Authentication
 
-For programmatic (non-interactive) access, the design corpus specifies **API-key authentication with regular rotation every 30 days** — **Designed**. `Source: documentation/Technical Specifications.md:L494-L496`. The data model anticipates this control: the `Organization` entity carries an `APIKey` field on which a per-tenant key would be stored and rotated. `Source: backend/internal/db/schema.go:L15`.
+For programmatic (non-interactive) access, the design corpus specifies **API-key authentication with regular rotation every 30 days** — **Designed**. `Source: documentation/Technical Specifications.md:L484-L486`. The data model anticipates this control: the `Organization` entity carries an `APIKey` field on which a per-tenant key would be stored and rotated. `Source: backend/internal/db/schema.go:L15`.
 
 ### Login Hardening Gap
 
@@ -75,7 +75,7 @@ The `Login` handler carries an explicit `HUMAN ASSISTANCE NEEDED` note stating t
 
 Authorization is designed as Role-Based Access Control (RBAC) mapped onto the `User.Role` field of the user entity. `Source: backend/internal/db/schema.go:L27`. Two facts make the entire RBAC control **Designed** rather than Implemented. First, `Role` is declared as a plain `string` with no enumeration or database constraint, so the five-role vocabulary below is defined in the design corpus, not enforced by the schema. `Source: backend/internal/db/schema.go:L20-L30`. Second, role enforcement would occur inside `middleware.AuthMiddleware()`, which guards the protected route groups but belongs to the absent `middleware` package — so no role check runs today. `Source: backend/internal/api/routes.go:L25`.
 
-The five roles and their permissions, reproduced from the design corpus, are enumerated below; each maps to a value of `User.Role` and cross-references functional requirement UA-001-2 (Role-based Access). `Source: documentation/Technical Specifications.md:L500-L508`, `Source: documentation/Software Requirements Specifications (SRS).md:L429`.
+The five roles and their permissions, reproduced from the design corpus, are enumerated below; each maps to a value of `User.Role` and cross-references functional requirement UA-001-2 (Role-based Access). `Source: documentation/Technical Specifications.md:L490-L498`, `Source: documentation/Software Requirements Specifications (SRS).md:L429`.
 
 | Role | Permissions | Maturity |
 |------|-------------|----------|
@@ -85,7 +85,7 @@ The five roles and their permissions, reproduced from the design corpus, are enu
 | Auditor | Read-only access to all data for auditing purposes. | Designed |
 | API User | Programmatic access to specific API endpoints. | Designed |
 
-`Source: documentation/Technical Specifications.md:L500-L508`.
+`Source: documentation/Technical Specifications.md:L490-L498`.
 
 Authorization is additionally scoped by tenant: the `User` entity carries an `OrganizationID`, so a fully wired authorization layer would constrain each role's reach to the caller's own organization in addition to the role check above. `Source: backend/internal/db/schema.go:L23`. The `User` entity that carries both `Role` and `OrganizationID` is defined in [`../architecture/data-model.md`](../architecture/data-model.md) (see **Fig M1 — Data Model ERD**).
 
@@ -96,11 +96,11 @@ Both of the controls in this section are **Designed**: they are specified in the
 
 ### Multi-Factor Authentication
 
-Multi-factor authentication (MFA) is required for dashboard access and would be satisfied by any one of three second factors: a Time-based One-Time Password (TOTP), SMS-based verification, or a hardware security key (for example, a YubiKey) — **Designed**. `Source: documentation/Technical Specifications.md:L478-L482`, `Source: documentation/Software Requirements Specifications (SRS).md:L493`. This maps to functional requirement UA-001-3 (Multi-factor Authentication). `Source: documentation/Software Requirements Specifications (SRS).md:L430`.
+Multi-factor authentication (MFA) is required for dashboard access and would be satisfied by any one of three second factors: a Time-based One-Time Password (TOTP), SMS-based verification, or a hardware security key (for example, a YubiKey) — **Designed**. `Source: documentation/Technical Specifications.md:L468-L472`, `Source: documentation/Software Requirements Specifications (SRS).md:L493`. This maps to functional requirement UA-001-3 (Multi-factor Authentication). `Source: documentation/Software Requirements Specifications (SRS).md:L430`.
 
 ### Password Policy
 
-The designed password policy maps to functional requirement UA-001-5 (Password Policies) and comprises the rules below — **Designed**. `Source: documentation/Technical Specifications.md:L484-L488`, `Source: documentation/Software Requirements Specifications (SRS).md:L432`.
+The designed password policy maps to functional requirement UA-001-5 (Password Policies) and comprises the rules below — **Designed**. `Source: documentation/Technical Specifications.md:L474-L478`, `Source: documentation/Software Requirements Specifications (SRS).md:L432`.
 
 | Rule | Requirement | Maturity |
 |------|-------------|----------|
@@ -109,7 +109,7 @@ The designed password policy maps to functional requirement UA-001-5 (Password P
 | History | Prevent reuse of the last 5 passwords. | Designed |
 | Maximum age | 90 days. | Designed |
 
-`Source: documentation/Technical Specifications.md:L484-L488`.
+`Source: documentation/Technical Specifications.md:L474-L478`.
 
 
 ## Encryption and Key Management
@@ -118,15 +118,15 @@ The encryption controls are **Designed (Provisioned via infrastructure once appl
 
 ### Encryption at Rest
 
-All sensitive data — including user credentials and transaction details — is specified to be encrypted at rest using AES-256. `Source: documentation/Software Requirements Specifications (SRS).md:L497`. The design corpus locates this at the storage tier: RDS PostgreSQL encrypted with AWS-managed keys, S3 buckets using server-side encryption with AWS KMS, and ElastiCache for Redis with encryption enabled — **Designed (Provisioned via infrastructure once applied)**. `Source: documentation/Technical Specifications.md:L527-L530`.
+All sensitive data — including user credentials and transaction details — is specified to be encrypted at rest using AES-256. `Source: documentation/Software Requirements Specifications (SRS).md:L497`. The design corpus locates this at the storage tier: RDS PostgreSQL encrypted with AWS-managed keys, S3 buckets using server-side encryption with AWS KMS, and ElastiCache for Redis with encryption enabled — **Designed (Provisioned via infrastructure once applied)**. `Source: documentation/Technical Specifications.md:L517-L519`.
 
 ### Encryption in Transit
 
-All API communications are specified to use HTTPS with TLS 1.2 or higher. `Source: documentation/Software Requirements Specifications (SRS).md:L499`, `Source: documentation/Technical Specifications.md:L532-L534`. The Go service does not terminate TLS itself; in the designed topology this is provided by the load balancer and infrastructure layer, so the control is **Designed (Provisioned via infrastructure once applied)**.
+All API communications are specified to use HTTPS with TLS 1.2 or higher. `Source: documentation/Software Requirements Specifications (SRS).md:L499`, `Source: documentation/Technical Specifications.md:L522-L523`. The Go service does not terminate TLS itself; in the designed topology this is provided by the load balancer and infrastructure layer, so the control is **Designed (Provisioned via infrastructure once applied)**.
 
 ### Secrets and Key Management
 
-Credentials and API keys are specified to be stored and managed with AWS Secrets Manager, backed by AWS Key Management Service (KMS) for encryption keys and Hardware Security Modules (HSMs) for cryptographic key storage — **Designed (Provisioned via infrastructure once applied)**. `Source: documentation/Software Requirements Specifications (SRS).md:L501`, `Source: documentation/Technical Specifications.md:L536-L538`.
+Credentials and API keys are specified to be stored and managed with AWS Secrets Manager, backed by AWS Key Management Service (KMS) for encryption keys and Hardware Security Modules (HSMs) for cryptographic key storage — **Designed (Provisioned via infrastructure once applied)**. `Source: documentation/Software Requirements Specifications (SRS).md:L501`, `Source: documentation/Technical Specifications.md:L526-L528`.
 
 The `User` entity persists a `PasswordHash` field, which stores the hashed credential and **must never be serialized over the API** in any request or response body. `Source: backend/internal/db/schema.go:L26`. The authentication endpoints accept a password only on login and never echo any credential material back to the client; see the [authentication API reference](../api-reference/authentication.md) for the exact response bodies.
 
@@ -142,16 +142,16 @@ The maturity of every control discussed on this page is summarized below.
 | Gin access logging and panic recovery (`gin.Logger()`, `gin.Recovery()`) | Implemented | `Source: backend/internal/api/routes.go:L9-L14` |
 | `Login` / `Logout` handlers | Implemented | `Source: backend/internal/api/handlers/auth.go:L21-L55` |
 | Frontend bearer-token attach (request interceptor) | Implemented | `Source: frontend/src/services/api.ts:L11-L23` |
-| JWT issuance, 15-minute expiry + refresh token | Designed | `Source: documentation/Technical Specifications.md:L490-L492`; `Source: backend/internal/api/handlers/auth.go:L5` |
-| Multi-factor authentication (TOTP / SMS / hardware key) | Designed | `Source: documentation/Technical Specifications.md:L478-L482` |
-| Password policy (length / complexity / history / max age) | Designed | `Source: documentation/Technical Specifications.md:L484-L488` |
-| API-key authentication, 30-day rotation | Designed | `Source: documentation/Technical Specifications.md:L494-L496` |
-| RBAC role enforcement (five roles over `User.Role`) | Designed | `Source: backend/internal/db/schema.go:L27`; `Source: documentation/Technical Specifications.md:L500-L508` |
+| JWT issuance, 15-minute expiry + refresh token | Designed | `Source: documentation/Technical Specifications.md:L480-L482`; `Source: backend/internal/api/handlers/auth.go:L5` |
+| Multi-factor authentication (TOTP / SMS / hardware key) | Designed | `Source: documentation/Technical Specifications.md:L468-L472` |
+| Password policy (length / complexity / history / max age) | Designed | `Source: documentation/Technical Specifications.md:L474-L478` |
+| API-key authentication, 30-day rotation | Designed | `Source: documentation/Technical Specifications.md:L484-L486` |
+| RBAC role enforcement (five roles over `User.Role`) | Designed | `Source: backend/internal/db/schema.go:L27`; `Source: documentation/Technical Specifications.md:L490-L498` |
 | `AuthMiddleware()` token validation / route protection | Designed | `Source: backend/internal/api/routes.go:L6`, `Source: backend/internal/api/routes.go:L25` |
 | Frontend 401 auto-refresh | Designed | `Source: frontend/src/services/api.ts:L11-L23` |
-| AES-256 encryption at rest | Designed (Provisioned via infrastructure once applied) | `Source: documentation/Software Requirements Specifications (SRS).md:L497`; `Source: documentation/Technical Specifications.md:L527-L530` |
-| TLS 1.2+ encryption in transit | Designed (Provisioned via infrastructure once applied) | `Source: documentation/Software Requirements Specifications (SRS).md:L499`; `Source: documentation/Technical Specifications.md:L532-L534` |
-| AWS Secrets Manager / KMS / HSM key management | Designed (Provisioned via infrastructure once applied) | `Source: documentation/Software Requirements Specifications (SRS).md:L501`; `Source: documentation/Technical Specifications.md:L536-L538` |
+| AES-256 encryption at rest | Designed (Provisioned via infrastructure once applied) | `Source: documentation/Software Requirements Specifications (SRS).md:L497`; `Source: documentation/Technical Specifications.md:L517-L519` |
+| TLS 1.2+ encryption in transit | Designed (Provisioned via infrastructure once applied) | `Source: documentation/Software Requirements Specifications (SRS).md:L499`; `Source: documentation/Technical Specifications.md:L522-L523` |
+| AWS Secrets Manager / KMS / HSM key management | Designed (Provisioned via infrastructure once applied) | `Source: documentation/Software Requirements Specifications (SRS).md:L501`; `Source: documentation/Technical Specifications.md:L526-L528` |
 
 
 ## Related Documentation
@@ -160,6 +160,6 @@ The maturity of every control discussed on this page is summarized below.
 - [`../architecture/overview.md`](../architecture/overview.md) — where the authentication and authorization controls sit in the system, via **Fig A1 — Current Implemented Scaffold** and **Fig A2 — Designed Target Architecture**.
 - [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md) — the consolidated Implemented/Provisioned/Designed defect catalog, including the auth-middleware and `AuthService` rows.
 - [`../architecture/data-model.md`](../architecture/data-model.md) — the `User` entity in **Fig M1 — Data Model ERD**, including the `Role` field on which RBAC maps.
-- [`../index.md`](../index.md) — documentation home.
+- `../index.md` — documentation home (planned root-navigation landing page; not yet created).
 - [`../../README.md`](../../README.md) — project readme and top-level navigation.
 

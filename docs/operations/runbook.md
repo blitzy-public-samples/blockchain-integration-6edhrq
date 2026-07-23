@@ -8,7 +8,7 @@ Maturity tags follow the project convention: **Implemented** (present in code to
 
 | Alert | Trigger condition | Maturity of signal | Failure mode |
 |-------|-------------------|--------------------|--------------|
-| Backend crash-loop on startup | Process exits immediately after launch | Implemented (observable via container restarts) | FM-1 Uninitialized ticker panic |
+| Backend startup panic (latent, post-build) | Would panic when the ticker is constructed, once the module builds; not reproducible today | Latent (present in code; not observable today — the image build fails first, see FM-4) | FM-1 Uninitialized ticker panic |
 | Settlement lag rising | Transactions remain `Pending` beyond threshold | Designed (needs `/metrics`) | FM-2 Settlement retry behavior |
 | Signature poll stalled | No signature poll log within two intervals | Implemented emission / Designed metric | FM-3 Signature processor poll |
 | Build/boot failure | Compilation or wiring error before serving | Implemented (build output) | FM-4 Processor & router wiring mismatch |
@@ -16,9 +16,9 @@ Maturity tags follow the project convention: **Implemented** (present in code to
 
 ## FM-1 — Uninitialized ticker panic at startup
 
-**Maturity:** Implemented defect (reproducible today).
+**Maturity:** Latent runtime defect — present in code, but **not reproducible today** because the backend module does not compile: there is no `go.mod`, and `pkg/logger`, `internal/config`, `internal/blockchain`, and `internal/custodian` are imported but absent `Source: backend/cmd/server/main.go:L10` (see FM-4). The panic is therefore reachable only **after** the FM-4 compile blockers are resolved, consistent with the source-of-truth reconciliation in [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md) (Defect #2: a *latent* runtime crash, "only reachable once those compile-blocking defects are resolved").
 
-**Detection.** The backend process panics during startup and the container enters a crash-loop; no HTTP port begins serving. The panic originates in the transaction processor.
+**Detection.** Today the observable symptom is a **build/image-build failure**, not a running-container crash-loop: the backend is not a Go module and does not compile, and the backend image build fails at `COPY go.mod go.sum ./` `Source: infrastructure/docker/Dockerfile.backend:L8` before any container can start (see FM-4). No process launches, so the ticker panic is not observable yet. **Once the FM-4 compile blockers are resolved**, this defect would surface as a startup panic in the transaction processor that exits the process before any HTTP port begins serving.
 
 **Diagnosis.** `transactionCheckInterval` is declared but never assigned, so it holds the zero value `0` `Source: backend/internal/tasks/transaction_processor.go:L13-L16`. Passing `0` to `time.NewTicker(0)` panics (`non-positive interval for NewTicker`). Contrast the signature processor, which is correct: it uses a positive constant `const signatureCheckInterval = 5 * time.Minute` `Source: backend/internal/tasks/signature_processor.go:L13`.
 
@@ -30,7 +30,7 @@ Maturity tags follow the project convention: **Implemented** (present in code to
 
 **Detection.** Transactions stay in status `Pending` and settlement lag climbs on the [`dashboard-template.json`](dashboard-template.json) settlement-lag panel (a Designed metric).
 
-**Diagnosis.** The processor loop logs per-transaction errors via `logger.Error(...)` and then `continue`s to the next item; there is **no** explicit retry counter or exponential backoff `Source: backend/internal/tasks/transaction_processor.go:L44,L50,L57`. A transaction that errors is left `Pending` and is retried implicitly on the next ticker tick (retry-on-next-poll). Successful settlement transitions a transaction `Pending -> Processed` `Source: backend/internal/core/transaction/service.go:L46,L81`. Note this cannot execute today because of FM-1, and the blockchain/custodian adapters are absent.
+**Diagnosis.** The processor loop logs per-transaction errors via `logger.Error(...)` and then `continue`s to the next item; there is **no** explicit retry counter or exponential backoff `Source: backend/internal/tasks/transaction_processor.go:L44,L50,L57`. A transaction that errors is left `Pending` and is retried implicitly on the next ticker tick (retry-on-next-poll). Successful settlement transitions a transaction `Pending -> Processed` `Source: backend/internal/core/transaction/service.go:L46,L81`. Note this cannot execute today because the backend does not compile (FM-4); even after it builds, the transaction processor would still hit the latent ticker panic (FM-1), and the blockchain/custodian adapters are absent.
 
 **Remediation (documented, not applied).** After FM-1 is resolved, add a bounded retry with backoff and a dead-letter path for repeatedly failing transactions, and emit a settlement-lag metric to drive the alert. Documented only.
 
