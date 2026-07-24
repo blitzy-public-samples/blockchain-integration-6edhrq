@@ -1,6 +1,6 @@
 # Local Development
 
-This page documents the day-to-day development loop for both stacks of the Blockchain Integration Service and Dashboard — the Go/Gin backend and the React 18 + TypeScript (Create React App) frontend — and summarizes the GitHub Actions continuous-integration pipeline that runs on each push and pull request. Prerequisites and the install tracks are covered in [installation.md](./installation.md), and environment configuration is covered in [configuration.md](./configuration.md). Critically, this page also records the honest **build caveats** that mean the repository does not build cleanly as-is; each caveat is cited and labeled with the project-wide maturity discipline (**Implemented**, **Provisioned**, **Designed**).
+This page documents the day-to-day development loop for both stacks of the Blockchain Integration Service and Dashboard — the Go/Gin backend and the React 18 + TypeScript (Create React App) frontend — and summarizes the GitHub Actions continuous-integration pipeline that runs on each push and pull request. Prerequisites and the install tracks are covered in [installation.md](./installation.md), and environment configuration is covered in [configuration.md](./configuration.md). Critically, this page also records the honest **build caveats** that mean the repository does not build cleanly as-is; each caveat is cited and labeled with the project-wide maturity discipline (**Implemented**, **Source-present (non-buildable)**, **Provisioned**, **Designed**), identical to the [Maturity Legend](../architecture/scaffold-vs-design.md#maturity-legend). Because the backend has no `go.mod` and the frontend does not build cleanly, no runtime behavior on this page is claimed as Implemented.
 
 ## Backend Development Workflow (Go)
 
@@ -24,13 +24,15 @@ The test suite targets the five test files under `backend/tests/` — `api_test.
 
 The frontend is a Create React App project; its `start`, `build`, `test`, and `eject` scripts delegate to `react-scripts`, while `lint` runs `eslint src` and `format` runs `prettier --write src`. `Source: frontend/package.json:L20-L27`. The stack is React 18.2.0 with `react-scripts` 5.0.1. `Source: frontend/package.json:L9-L13`. The inner loop installs dependencies, starts the dev server, and produces a production bundle.
 
+> **Create React App is deprecated.** On 2025-02-14 the React team officially deprecated Create React App for new applications; CRA now has no active maintainers and continues only in maintenance mode, and the team recommends migrating to a framework or to a build tool such as Vite, Parcel, or RSBuild. `Source: React Blog, "Sunsetting Create React App" — react.dev/blog/2025/02/14/sunsetting-create-react-app`. This repository's frontend is pinned to `react-scripts` 5.0.1 (`Source: frontend/package.json:L13`); the CRA commands below still function against that pinned toolchain, but any migration away from CRA is **Designed** (not present in the repository today). Treat CRA as a maintenance-mode dependency, not a forward-looking choice.
+
 ```bash
 npm install           # install dependencies (generates a lockfile)
 npm start             # CRA dev server at http://localhost:3000
 npm run build         # production bundle
 ```
 
-The `react-scripts start` dev server serves the dashboard at `http://localhost:3000` (the Create React App default). `Source: frontend/package.json:L21`. Testing, linting, and formatting use the remaining scripts.
+The `npm start` script delegates to `react-scripts start`. `Source: frontend/package.json:L21`. Create React App's `start` script serves the app on port `3000` by default (overridable via the `PORT` environment variable), so the dashboard is reachable at `http://localhost:3000` unless `PORT` is set. `Source: Create React App docs, "Advanced Configuration" (PORT) — create-react-app.dev/docs/advanced-configuration`. Testing, linting, and formatting use the remaining scripts.
 
 ```bash
 npm test              # react-scripts test runner
@@ -62,10 +64,14 @@ The repository does not build cleanly as-is. The four caveats below are the core
 ### 1. No committed Go module (`go.mod` / `go.sum`)
 
 There is no `go.mod` or `go.sum` anywhere in the repository, so the backend is not a Go module and neither `go build -v ./...` nor `go test -v ./...` — the commands the CI build and test jobs run — can succeed as-is. `Source: .github/workflows/backend-ci.yml:L19,L30`. Several packages imported by the composition root are also absent from the tree: `internal/config`, `pkg/logger`, `internal/blockchain`, `internal/custodian`, and `internal/api/middleware`. `Source: backend/cmd/server/main.go:L6,L8-L10,L12`. **Maturity: Designed** — the scaffold does not build. Workaround: a `go.mod` must be authored (and the absent packages supplied) before the backend can build; the full inventory is catalogued in [scaffold-vs-design.md](../architecture/scaffold-vs-design.md).
+>
+> **Supply-chain consequence.** Because there is no `go.sum` (and no `go.mod`), the backend has no pinned, checksum-verified dependency graph: dependency versions are not locked, builds are not reproducible across machines, and no dependency-integrity or vulnerability audit (for example `go mod verify` or `govulncheck`) can be run against the tree as-is. When you author a `go.mod` locally, pin explicit versions and commit the generated `go.sum` so transitive-dependency CVEs become auditable; treat any unpinned resolution as a supply-chain risk rather than a verified baseline. `Source: repository contains no go.mod/go.sum (backend/ tree)`.
 
 ### 2. No frontend lockfile, but CI runs `npm ci`
 
 The frontend has no committed lockfile (`package-lock.json` is absent), yet every frontend CI job runs `npm ci`. `Source: .github/workflows/frontend-ci.yml:L18`, `Source: frontend/package.json`. Because `npm ci` installs strictly from an existing lockfile, every frontend job fails at that step against the repository as-is. **Maturity: Designed / broken CI step.** Workaround: locally, use `npm install` (which resolves dependencies and generates a `package-lock.json`) rather than `npm ci`.
+>
+> **Supply-chain consequence.** With no committed `package-lock.json`, the frontend dependency graph is not pinned: each `npm install` may resolve different transitive versions within the declared semver ranges (`Source: frontend/package.json:L9-L19`), so installs are not reproducible and `npm ci`/`npm audit` cannot verify integrity against a locked baseline. Perform installs in an isolated, disposable environment, and commit the generated `package-lock.json` (and run `npm audit`) before relying on any resolved dependency set, so transitive CVEs are surfaced rather than silently pulled in.
 
 ### 3. TypeScript config versus the CRA toolchain
 
@@ -73,7 +79,9 @@ The frontend has no committed lockfile (`package-lock.json` is absent), yet ever
 
 ### 4. Go version discrepancy (CI versus Docker)
 
-The backend CI pins Go `1.20`, while the backend Docker image is based on `golang:1.17-alpine`. `Source: .github/workflows/backend-ci.yml:L17`, `Source: infrastructure/docker/Dockerfile.backend:L2`. The two toolchains disagree, which undermines build reproducibility between CI and the container image. **Maturity: Provisioned / inconsistent** — both artifacts exist but pin different versions. Workaround: use Go 1.20+ locally to match CI.
+The backend CI pins Go `1.20`, while the backend Docker image is based on `golang:1.17-alpine`. `Source: .github/workflows/backend-ci.yml:L17`, `Source: infrastructure/docker/Dockerfile.backend:L2`. The two toolchains disagree, which undermines build reproducibility between CI and the container image. **Maturity: Provisioned / inconsistent** — both artifacts exist but pin different versions.
+>
+> **Reproduction versus support are two different things.** To *reproduce the CI environment exactly*, install Go **1.20** specifically — the version the workflow pins (`Source: .github/workflows/backend-ci.yml:L17`); a newer local Go does **not** reproduce a build pinned to 1.20, so "Go 1.20+" is not a faithful CI reproduction. Note, however, that Go 1.20 is well past end of life: Go supports only its two most recent major releases, which are Go 1.25 and Go 1.26 as of this writing, so Go 1.20 receives no security or bug fixes. `Source: Go release policy — go.dev/doc/devel/release`. For a *supported* local toolchain use a current release (Go 1.25 or 1.26); to *match CI byte-for-byte* use Go 1.20 in a throwaway environment and treat it as an unsupported, security-frozen toolchain rather than a recommended one. The CI/Docker version drift itself is a defect documented, not fixed, here.
 
 ## Cross References and Next Steps
 

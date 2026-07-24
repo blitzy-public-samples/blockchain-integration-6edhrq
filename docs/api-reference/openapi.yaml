@@ -10,10 +10,28 @@ info:
     Source: backend/internal/api/routes.go:L9-L54.
 
     Maturity discipline (per operation): every operation is annotated in its
-    `description` as **Implemented** (present and functional in code as-declared)
-    or **Designed** (the route is registered by the router, but its handler
-    method is not defined in the readable handler source or is a name-mismatched
-    placeholder). No operation is invented beyond the 18 registered routes.
+    `description` as **Source-present (non-buildable)** (the handler method is
+    written in source, but the containing package does not compile, so no runtime
+    behavior may be asserted) or **Designed** (the route is registered by the
+    router, but its handler method is not defined in the readable handler source
+    or is a name-mismatched placeholder). Per the single operational-truth
+    vocabulary in docs/architecture/scaffold-vs-design.md, the label
+    **Implemented** (present, building, and functional) is **reserved** and
+    **nothing in this repository qualifies for it** at this checkpoint: the
+    backend has no `go.mod` and every package carries compile-blocking defects,
+    so no operation below is Implemented. No operation is invented beyond the 18
+    registered routes.
+
+    Response serialization (applies to every entity schema in `components`): the
+    lower-camelCase property names in the Organization, User, Vault, Transaction,
+    and Signature schemas are the **Designed** response DTO. The Go structs carry
+    **no `json` tags** and embed `gorm.Model`; were the code to compile and
+    marshal them as-declared, the actual JSON keys would be **PascalCase** (for
+    example `ID`, `OrganizationID`, `UserID`, `VaultID`, `Status`,
+    `BlockchainType`, `TxHash`, `RawSignature`, `Amount`, `Metadata`,
+    `CreatedAt`, `UpdatedAt`) plus a promoted `DeletedAt`. See
+    docs/api-reference/overview.md (Response Serialization).
+    Source: backend/internal/db/schema.go:L11-L68.
 
     Path fidelity and known divergences (documented here, never silently
     reconciled — the paths below are the ACTUAL code paths):
@@ -48,10 +66,16 @@ info:
 servers:
   - url: http://localhost:8080
     description: |
-      Local development (no version prefix; paths are served at the router
-      root). No `/api/v1` base path exists in code. The listen address is
-      configurable via `cfg.ServerAddress`; http://localhost:8080 is the
-      documented default. Source: backend/cmd/server/main.go:L60.
+      Local development base URL — **illustrative only** (no version prefix;
+      paths are served at the router root). No `/api/v1` base path exists in
+      code. `main.go` calls `router.Run(cfg.ServerAddress)`, but `cfg` is
+      produced by the **absent** `internal/config` package, so there is no
+      compiled default bind address and the value cannot be resolved today;
+      `http://localhost:8080` is a documentation convention. The frontend Axios
+      client instead defaults its base URL to `https://api.example.com`
+      (overridable via `REACT_APP_API_BASE_URL`).
+      Source: backend/cmd/server/main.go:L6,L59-L60,
+      Source: frontend/src/services/api.ts:L4.
 tags:
   - name: Authentication
     description: |
@@ -81,7 +105,10 @@ paths:
       description: |
         Authenticates a user with `username` and `password` and returns a signed
         JWT used as the bearer token for all secured endpoints. Public — no
-        authentication required. **Implemented**.
+        authentication required. **Source-present (non-buildable)** — the handler
+        is written in source, but the `api` package imports the absent
+        `middleware` package and the backend has no `go.mod`, so this operation
+        does not run today.
         Source: backend/internal/api/handlers/auth.go:L21-L39.
       security: []
       requestBody:
@@ -92,7 +119,7 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
             example:
               username: alice
-              password: s3cret-passphrase
+              password: 'S3cret-Passphrase!'
       responses:
         '200':
           description: Authentication succeeded; a JWT is returned.
@@ -140,7 +167,7 @@ paths:
             example:
               username: alice
               email: alice@example.com
-              password: s3cret-passphrase
+              password: 'S3cret-Passphrase!'
               organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
       responses:
         '201':
@@ -175,7 +202,10 @@ paths:
         Invalidates the caller's session using the authenticated `userID`
         resolved from the JWT. Secured — the router attaches `AuthMiddleware()`
         to this route within the auth group, so it inherits the global
-        `bearerAuth` requirement. **Implemented**.
+        `bearerAuth` requirement. **Source-present (non-buildable)** — the handler
+        is written in source, but the `api` package imports the absent
+        `middleware` package and the backend has no `go.mod`, so this operation
+        does not run today.
         Source: backend/internal/api/handlers/auth.go:L41-L55,
         Source: backend/internal/api/routes.go:L21.
       responses:
@@ -211,7 +241,11 @@ paths:
       summary: Create a vault
       description: |
         Creates a custodial vault for the caller's organization and provisions an
-        on-chain address for the selected blockchain. **Implemented**.
+        on-chain address for the selected blockchain. **Source-present
+        (non-buildable)** — the handler is written in source, but the vault path
+        depends on the absent `internal/blockchain`, `internal/custodian`, and
+        `middleware` packages and the backend has no `go.mod`, so this operation
+        does not run today.
         Source: backend/internal/api/handlers/vault.go:L37-L57.
 
         Path note: the frontend client calls the plural `/vaults` path, which
@@ -441,7 +475,12 @@ paths:
         Creates a blockchain transaction (the command path): builds a raw
         transaction for the source vault and persists it with status `Pending`.
         Settlement to `Processed` is performed asynchronously by the background
-        transaction processor. **Implemented**.
+        transaction processor. **Source-present (non-buildable)** — the handler is
+        written in source, but the transaction path depends on the absent
+        `internal/blockchain`, `internal/custodian`, and `middleware` packages and
+        the backend has no `go.mod`, so this operation does not run today; the
+        processor additionally has a latent `time.NewTicker(0)` panic from an
+        uninitialized interval.
         Source: backend/internal/api/handlers/transaction.go:L21-L35.
 
         Path note: the frontend client posts to the plural `/transactions` path.
@@ -747,7 +786,7 @@ paths:
                 - id: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
                   userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
                   vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
-                  status: completed
+                  status: Ready
                   rawSignature: 304402201f9f...c3a5
                   metadata: {}
                   createdAt: '2024-01-15T09:30:00Z'
@@ -771,8 +810,9 @@ paths:
       description: |
         Retrieves a signature (and its status) by its UUID. The route is
         registered, but no `GetSignature` handler method is defined in the
-        readable handler source; the closest implemented behavior is
-        `CheckSignatureStatus`. This operation is therefore **Designed**.
+        readable handler source; the closest source-present behavior is
+        `CheckSignatureStatus` (itself unwired to any route and non-buildable).
+        This operation is therefore **Designed**.
         Source: backend/internal/api/routes.go:L49.
 
         Path note: the frontend client fetches signature status via the plural
@@ -788,7 +828,7 @@ paths:
                 id: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
                 userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
                 vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
-                status: completed
+                status: Ready
                 rawSignature: 304402201f9f...c3a5
                 metadata: {}
                 createdAt: '2024-01-15T09:30:00Z'
@@ -825,7 +865,7 @@ paths:
             schema:
               $ref: '#/components/schemas/UpdateSignatureRequest'
             example:
-              status: completed
+              status: Ready
       responses:
         '200':
           description: The updated signature (**Designed**).
@@ -837,7 +877,7 @@ paths:
                 id: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
                 userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
                 vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
-                status: completed
+                status: Ready
                 rawSignature: 304402201f9f...c3a5
                 metadata: {}
                 createdAt: '2024-01-15T09:30:00Z'
@@ -897,7 +937,10 @@ components:
         JWT bearer authentication. Obtain a token from `POST /auth/login`
         (response `{ "token": "..." }`) and send it on every secured request as
         the header `Authorization: Bearer <token>`. This matches the frontend
-        Axios request interceptor and the router's `AuthMiddleware`.
+        Axios request interceptor and the router's `AuthMiddleware`. Note: the
+        `middleware` package that would enforce this is **absent** in the
+        scaffold, so bearer enforcement is **Designed** — no token check runs and
+        the `api` package does not compile.
         Source: frontend/src/services/api.ts:L11-L16,
         Source: backend/internal/api/routes.go:L25.
   parameters:
@@ -942,10 +985,14 @@ components:
     User:
       type: object
       description: |
-        A user within an organization. The persisted `User` entity carries a
-        `PasswordHash` field that is **never serialized over the API**, so it is
-        intentionally omitted from this response schema.
-        Source: backend/internal/db/schema.go:L20-L30.
+        A user within an organization. This response schema is the **Designed**
+        safe DTO and deliberately omits `PasswordHash`. Security defect
+        (documented, not fixed): the persisted `User` struct gives `PasswordHash`
+        **no `json:"-"` tag**, so if the code compiled and marshaled a `User`
+        directly the password hash **would be exposed** in the JSON response.
+        Omitting it here is therefore a Designed contract, not the current code
+        behavior. See docs/security/security-model.md.
+        Source: backend/internal/db/schema.go:L20-L30 (specifically L26).
       properties:
         id:
           type: string
@@ -1115,9 +1162,14 @@ components:
         status:
           type: string
           description: |
-            Signature lifecycle status (free-form string in code; the service
-            initializes it to `pending`). Source: backend/internal/db/schema.go:L63,
-            Source: backend/internal/core/signature/service.go:L30.
+            Signature lifecycle status — a free-form, unconstrained string in
+            code. The service writes only the literal `pending`; the terminal
+            states `Ready` / `Failed` are referenced via the undefined
+            `signature.StatusReady` / `signature.StatusFailed` constants and are
+            therefore **Designed**. The frontend Zod schema uses a divergent
+            `Completed` vocabulary. Source: backend/internal/db/schema.go:L63,
+            Source: backend/internal/core/signature/service.go:L30,
+            Source: backend/internal/tasks/signature_processor.go:L46,L55.
         rawSignature:
           type: string
           description: Raw custodian signature material.
@@ -1156,7 +1208,7 @@ components:
           format: password
       example:
         username: alice
-        password: s3cret-passphrase
+        password: 'S3cret-Passphrase!'
     RegisterRequest:
       type: object
       description: |
@@ -1183,7 +1235,7 @@ components:
       example:
         username: alice
         email: alice@example.com
-        password: s3cret-passphrase
+        password: 'S3cret-Passphrase!'
         organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
     CreateVaultRequest:
       type: object
@@ -1291,13 +1343,16 @@ components:
       type: object
       description: |
         Signature update payload. **Designed** — fields inferred; the update
-        handler is not defined in the readable handler source.
-        Source: backend/internal/api/routes.go:L50.
+        handler is not defined in the readable handler source. The `status`
+        vocabulary follows the Signature schema: only `pending` is written by
+        code, while `Ready` / `Failed` are Designed terminal states.
+        Source: backend/internal/api/routes.go:L50,
+        Source: backend/internal/core/signature/service.go:L30.
       properties:
         status:
           type: string
       example:
-        status: completed
+        status: Ready
     LoginResponse:
       type: object
       description: |

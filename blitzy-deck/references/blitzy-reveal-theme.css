@@ -241,7 +241,11 @@
   font-family: var(--ff-body);
   font-weight: 500;
   font-size: 0.62em;
-  color: var(--blitzy-text-muted);
+  /* WCAG AA (F11-A11Y-001): small caption text uses --blitzy-text (#333333),
+     an approved palette token, for >=4.5:1 on the light kpi-card surface.
+     --blitzy-text-muted (#999999) failed AA at this size; the canonical
+     :root token block is left byte-verbatim per RULE2-006. */
+  color: var(--blitzy-text);
 }
 
 /* 4.4 Brand lockup  —  Blitzy wordmark treatment for title/closing */
@@ -287,7 +291,9 @@
   gap: 10px;
   font-family: var(--ff-body);
   font-size: 0.55em;
-  color: var(--blitzy-text-muted);
+  /* WCAG AA (F11-A11Y-001): approved --blitzy-text (#333333) for >=4.5:1 on
+     light content slides; dark slide-types override to inverted text below. */
+  color: var(--blitzy-text);
 }
 .reveal .icon-row svg {
   width: 52px;

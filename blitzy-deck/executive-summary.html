@@ -4,6 +4,49 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Blockchain Integration Service &amp; Dashboard — Executive Summary</title>
+
+  <!--
+    ==========================================================================
+    Content Security Policy (F7-CDNSEC-001)
+    ==========================================================================
+    Restrictive CSP for a deck that loads three remote executable assets from a
+    single pinned CDN (cdn.jsdelivr.net) plus Google Fonts. The default-src 'none'
+    baseline denies everything, then each directive re-allows only what this deck
+    genuinely needs:
+      * script-src  — reveal.js/lucide (classic) + the Mermaid ES module import,
+                      all from jsdelivr; 'unsafe-inline' for the inline <script>
+                      blocks and 'unsafe-eval' because Mermaid's layout engine
+                      compiles helper functions at runtime. A nonce/hash-based
+                      policy is the Designed hardening once a build/serve step
+                      exists to inject per-load nonces (a static file cannot).
+      * style-src   — Google Fonts stylesheet + reveal.js/Mermaid inject inline
+                      styles, so 'unsafe-inline' is required for a static file.
+      * font-src    — Google Fonts binaries from fonts.gstatic.com.
+      * img-src     — the inline data: favicon only.
+      * connect-src — jsdelivr, for the dynamic ESM import fetch.
+    A <meta> CSP cannot express frame-ancestors, sandbox, or reporting; those
+    require HTTP response headers and are the Designed hardening when this deck
+    is served rather than opened from disk.
+
+    Subresource Integrity (SRI): the correct sha384 integrity= digests for the
+    four pinned CDN assets (reveal.js 5.1.0 reset.css + reveal.css + reveal.js,
+    lucide 0.460.0 umd, mermaid 11.4.0 esm) MUST be added to the <link>/<script>
+    tags below and to the ESM import once the digests can be verified against the
+    live CDN. They are intentionally omitted here because this deck was authored
+    offline: a guessed or stale integrity value would silently BREAK asset loading.
+    Add SRI + a matching hash-based CSP as the paired Designed hardening.
+    ==========================================================================
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none';
+                 script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline' 'unsafe-eval';
+                 style-src 'self' https://fonts.googleapis.com https://cdn.jsdelivr.net 'unsafe-inline';
+                 font-src https://fonts.gstatic.com;
+                 img-src 'self' data:;
+                 connect-src https://cdn.jsdelivr.net;
+                 base-uri 'none';
+                 form-action 'none'">
+
   <!-- Inline (empty) favicon to keep the deck self-contained and avoid a stray 404 request. -->
   <link rel="icon" href="data:,">
 
@@ -31,7 +74,9 @@
   <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Fira+Code:wght@400;500&display=swap">
 
-  <!-- reveal.js 5.1.0 core CSS (reset + framework). No prebuilt reveal theme — the Blitzy inline theme replaces it. -->
+  <!-- reveal.js 5.1.0 core CSS (reset + framework). No prebuilt reveal theme — the Blitzy inline theme replaces it.
+       SRI: add integrity="sha384-…" crossorigin="anonymous" to both <link>s once the digests are verifiable online
+       (see the Content Security Policy note above; omitted offline to avoid a stale hash breaking the stylesheet). -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
 
@@ -46,29 +91,29 @@
      * 1. Design tokens — VERBATIM from AAP Section 0.10.2 (authoritative)
      *    21 custom properties, exact values, exact ordering. Do not modify.
      * --------------------------------------------------------------------- */
-    :root {
-      --blitzy-primary: #5B39F3;
-      --blitzy-primary-dark: #2D1C77;
-      --blitzy-primary-navy: #1A105F;
-      --blitzy-primary-light: #7A6DEC;
-      --blitzy-primary-deep: #4101DB;
-      --blitzy-accent-teal: #94FAD5;
-      --blitzy-surface-0: #FFFFFF;
-      --blitzy-surface-1: #F4EFF6;
-      --blitzy-surface-2: #F2F0FE;
-      --blitzy-surface-3: #F5F5F5;
-      --blitzy-border: #D9D9D9;
-      --blitzy-border-soft: rgba(91, 57, 243, 0.18);
-      --blitzy-text: #333333;
-      --blitzy-text-muted: #999999;
-      --blitzy-text-invert: #FFFFFF;
-      --ff-body: 'Inter', system-ui, sans-serif;
-      --ff-display: 'Space Grotesk', 'Inter', sans-serif;
-      --ff-mono: 'Fira Code', 'Courier New', monospace;
-      --gradient-hero: linear-gradient(68deg, #7A6DEC 15.56%, #5B39F3 62.74%, #4101DB 84.44%);
-      --gradient-divider: linear-gradient(135deg, #2D1C77 0%, #5B39F3 100%);
-      --gradient-accent-bar: linear-gradient(90deg, #5B39F3 0%, #94FAD5 100%);
-    }
+:root {
+  --blitzy-primary: #5B39F3;
+  --blitzy-primary-dark: #2D1C77;
+  --blitzy-primary-navy: #1A105F;
+  --blitzy-primary-light: #7A6DEC;
+  --blitzy-primary-deep: #4101DB;
+  --blitzy-accent-teal: #94FAD5;
+  --blitzy-surface-0: #FFFFFF;
+  --blitzy-surface-1: #F4EFF6;
+  --blitzy-surface-2: #F2F0FE;
+  --blitzy-surface-3: #F5F5F5;
+  --blitzy-border: #D9D9D9;
+  --blitzy-border-soft: rgba(91, 57, 243, 0.18);
+  --blitzy-text: #333333;
+  --blitzy-text-muted: #999999;
+  --blitzy-text-invert: #FFFFFF;
+  --ff-body: 'Inter', system-ui, sans-serif;
+  --ff-display: 'Space Grotesk', 'Inter', sans-serif;
+  --ff-mono: 'Fira Code', 'Courier New', monospace;
+  --gradient-hero: linear-gradient(68deg, #7A6DEC 15.56%, #5B39F3 62.74%, #4101DB 84.44%);
+  --gradient-divider: linear-gradient(135deg, #2D1C77 0%, #5B39F3 100%);
+  --gradient-accent-bar: linear-gradient(90deg, #5B39F3 0%, #94FAD5 100%);
+}
 
     /* -----------------------------------------------------------------------
      * 2. Base reveal.js surfaces — default (content) slides
@@ -251,7 +296,9 @@
       font-family: var(--ff-body);
       font-weight: 500;
       font-size: 0.62em;
-      color: var(--blitzy-text-muted);
+      /* WCAG AA (F11-A11Y-001): approved --blitzy-text (#333333) for >=4.5:1 on the
+         light kpi-card surface; --blitzy-text-muted (#999999) was ~2.85:1 and failed. */
+      color: var(--blitzy-text);
     }
 
     /* 4.4 Brand lockup — Blitzy wordmark treatment for title/closing */
@@ -297,7 +344,9 @@
       gap: 10px;
       font-family: var(--ff-body);
       font-size: 0.55em;
-      color: var(--blitzy-text-muted);
+      /* WCAG AA (F11-A11Y-001): approved --blitzy-text (#333333) on light content
+         slides; dark slide-types override to inverted text below. */
+      color: var(--blitzy-text);
     }
     .reveal .icon-row svg {
       width: 52px;
@@ -408,18 +457,24 @@
      * 8. Deck-specific helpers (on-brand extensions of the canonical theme)
      * --------------------------------------------------------------------- */
 
-    /* Title-slide subtitle + audience framing line */
+    /* Title-slide subtitle + audience framing line.
+       WCAG AA (F11-A11Y-001): solid --blitzy-text-invert (#FFFFFF) rather than a
+       translucent white. The lightest hero-gradient stop (#7A6DEC) gives pure white
+       only ~4:1, and the prior 0.78/0.92 alphas lowered it further; solid white keeps
+       contrast in the ~6.3-9.3:1 range behind the centred text and matches the AAP
+       Section 0.10.2 "white text" mandate for the title slide. Size, not opacity,
+       carries the visual hierarchy between the two lines. */
     .reveal .slide-title .deck-subtitle {
       font-family: var(--ff-display);
       font-weight: 500;
       font-size: 1.05em;
-      color: rgba(255, 255, 255, 0.92);
+      color: var(--blitzy-text-invert);
       margin: 0.1em 0 0.3em;
     }
     .reveal .slide-title .audience {
       font-family: var(--ff-body);
       font-size: 0.62em;
-      color: rgba(255, 255, 255, 0.78);
+      color: var(--blitzy-text-invert);
       margin-top: 0.2em;
     }
 
@@ -427,7 +482,9 @@
     .reveal .fig-caption {
       font-family: var(--ff-body);
       font-size: 0.58em;
-      color: var(--blitzy-text-muted);
+      /* WCAG AA (F11-A11Y-001): approved --blitzy-text (#333333) for >=4.5:1 on the
+         light content surface; --blitzy-text-muted (#999999) failed AA at this size. */
+      color: var(--blitzy-text);
       margin: 0.1em 0 0.4em;
       max-width: 1500px;
     }
@@ -438,14 +495,15 @@
       max-width: 1500px;
     }
 
-    /* Maturity discipline mini-legend (Implemented / Provisioned / Designed) */
+    /* Maturity-status mini-legend helper (renders status pills inline) */
     .reveal .maturity-legend {
       display: flex;
       flex-wrap: wrap;
       gap: 16px;
       margin: 0.2em 0 0.5em;
       font-size: 0.55em;
-      color: var(--blitzy-text-muted);
+      /* WCAG AA (F11-A11Y-001): approved --blitzy-text (#333333); muted #999999 failed. */
+      color: var(--blitzy-text);
     }
     .reveal .maturity-legend span { display: inline-flex; align-items: center; gap: 8px; }
 
@@ -466,10 +524,21 @@
       background: var(--blitzy-accent-teal);
       border-color: rgba(26, 16, 95, 0.18);
     }
+    /* Source-present (code exists but does not compile). Neutral-grey treatment,
+       visually distinct from the purple-family Provisioned/Designed pills, reading
+       as "present but inert". #333333 on #F5F5F5 is ~12:1 (WCAG AA). */
+    .reveal .pill-source {
+      color: var(--blitzy-text);
+      background: var(--blitzy-surface-3);
+      border-color: var(--blitzy-border);
+    }
+    /* Provisioned (config present and valid but unwired). F11-BRAND-001: replaced the
+       off-palette amber (#6b4b00 / #FFE9B0) with approved Blitzy tokens; #2D1C77 on
+       #F4EFF6 is well above WCAG AA. */
     .reveal .pill-prov {
-      color: #6b4b00;
-      background: #FFE9B0;
-      border-color: rgba(107, 75, 0, 0.22);
+      color: var(--blitzy-primary-dark);
+      background: var(--blitzy-surface-1);
+      border-color: var(--blitzy-border-soft);
     }
     .reveal .pill-designed {
       color: var(--blitzy-primary-deep);
@@ -513,6 +582,45 @@
     /* Two-up layout for a diagram beside a short caption when useful */
     .reveal .slides section h2 + .fig-caption { margin-top: -0.2em; }
 
+    /* Discreet provenance footer (RULE2-004): every content slide cites the repository
+       artefact(s) its claims derive from, mirroring the "Source: <path>:<locator>"
+       discipline used throughout the Markdown docs. Small Fira Code, pinned to the
+       lower-left, --blitzy-text (#333333) for WCAG AA; the leading label is de-emphasised
+       via letter-spacing/weight rather than a low-contrast colour. */
+    .reveal .source-note {
+      position: absolute;
+      left: 0;
+      bottom: 0.6em;
+      font-family: var(--ff-mono);
+      font-size: 0.34em;
+      font-weight: 400;
+      letter-spacing: 0.01em;
+      color: var(--blitzy-text);
+      opacity: 0.92;
+      margin: 0;
+      max-width: 96%;
+      word-break: break-word;
+    }
+    .reveal .source-note .src-label {
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--blitzy-primary);
+      margin-right: 0.5em;
+    }
+    /* Inverted variant for the dark closing/divider slide-types (unused on content
+       slides, provided for completeness so a citation stays legible on dark grounds). */
+    .reveal .slide-closing .source-note,
+    .reveal .slide-divider .source-note { color: rgba(255, 255, 255, 0.9); }
+    .reveal .slide-closing .source-note .src-label,
+    .reveal .slide-divider .source-note .src-label { color: var(--blitzy-accent-teal); }
+
+    /* F11-BRAND-002: inline Lucide icon inside an <h2>, replacing a one-off inline
+       style so the treatment is reusable and theme-composed. */
+    .reveal .h2-icon {
+      vertical-align: -0.15em;
+      margin-right: 0.3em;
+    }
+
     /* -----------------------------------------------------------------------
      * 12. Accessibility — visible keyboard focus ring for reveal.js navigation
      *     controls (QA INFO-1). reveal.js ships outline:none on these buttons;
@@ -535,13 +643,13 @@
 
       <!-- ================= SLIDE 1 — TITLE ================= -->
       <section class="slide-title">
-        <span class="hero-icon"><i data-lucide="boxes"></i></span>
+        <span class="hero-icon" aria-hidden="true"><i data-lucide="boxes"></i></span>
         <span class="eyebrow">Executive Summary</span>
         <h1>Blockchain Integration Service &amp; Dashboard</h1>
         <p class="deck-subtitle">Documentation of the custodial platform as it exists today</p>
         <p class="audience">Prepared for leadership — no code literacy required</p>
         <hr class="accent-bar">
-        <span class="brand-lockup"><i data-lucide="zap"></i> Blitzy</span>
+        <span class="brand-lockup"><i data-lucide="zap" aria-hidden="true"></i> Blitzy</span>
       </section>
 
       <!-- ================= SLIDE 2 — WHAT WE DOCUMENTED ================= -->
@@ -550,16 +658,16 @@
         <h2>What We Documented</h2>
         <ul>
           <li>A complete documentation set for the on-disk Go&nbsp;+&nbsp;React custodial blockchain platform.</li>
-          <li>Architecture, APIs, data model, observability, deployment, and security.</li>
+          <li>Covers architecture, APIs, data model, observability, deployment, and security.</li>
           <li>Reconciles the aspirational design against the early-stage reality.</li>
-          <li>Packaged for both engineering and executive audiences.</li>
         </ul>
         <div class="icon-row">
-          <div><i data-lucide="layers"></i><span>Architecture</span></div>
-          <div><i data-lucide="book-open"></i><span>API Reference</span></div>
-          <div><i data-lucide="shield"></i><span>Security</span></div>
-          <div><i data-lucide="activity"></i><span>Observability</span></div>
+          <div><i data-lucide="layers" aria-hidden="true"></i><span>Architecture</span></div>
+          <div><i data-lucide="book-open" aria-hidden="true"></i><span>API Reference</span></div>
+          <div><i data-lucide="shield" aria-hidden="true"></i><span>Security</span></div>
+          <div><i data-lucide="activity" aria-hidden="true"></i><span>Observability</span></div>
         </div>
+        <p class="source-note"><span class="src-label">Source</span>repository root (62 files); documentation/</p>
       </section>
 
       <!-- ================= SLIDE 3 — BY THE NUMBERS (KPI GRID) ================= -->
@@ -568,41 +676,42 @@
         <h2>By the Numbers</h2>
         <div class="kpi-grid">
           <div class="kpi-card">
-            <span class="kpi-icon"><i data-lucide="file-text"></i></span>
+            <span class="kpi-icon" aria-hidden="true"><i data-lucide="file-text"></i></span>
             <span class="kpi-value">62</span>
             <span class="kpi-label">Repository files reviewed</span>
           </div>
           <div class="kpi-card">
-            <span class="kpi-icon"><i data-lucide="network"></i></span>
+            <span class="kpi-icon" aria-hidden="true"><i data-lucide="network"></i></span>
             <span class="kpi-value">18</span>
             <span class="kpi-label">REST endpoints documented</span>
           </div>
           <div class="kpi-card">
-            <span class="kpi-icon"><i data-lucide="database"></i></span>
+            <span class="kpi-icon" aria-hidden="true"><i data-lucide="database"></i></span>
             <span class="kpi-value">5</span>
             <span class="kpi-label">Core data entities</span>
           </div>
           <div class="kpi-card">
-            <span class="kpi-icon"><i data-lucide="boxes"></i></span>
+            <span class="kpi-icon" aria-hidden="true"><i data-lucide="boxes"></i></span>
             <span class="kpi-value">5</span>
             <span class="kpi-label">Product features</span>
           </div>
           <div class="kpi-card">
-            <span class="kpi-icon"><i data-lucide="activity"></i></span>
+            <span class="kpi-icon" aria-hidden="true"><i data-lucide="activity"></i></span>
             <span class="kpi-value">5</span>
             <span class="kpi-label">Observability pillars</span>
           </div>
           <div class="kpi-card">
-            <span class="kpi-icon"><i data-lucide="alert-triangle"></i></span>
+            <span class="kpi-icon" aria-hidden="true"><i data-lucide="alert-triangle"></i></span>
             <span class="kpi-value">12</span>
             <span class="kpi-label">Defects documented honestly</span>
           </div>
         </div>
+        <p class="source-note"><span class="src-label">Source</span>backend/internal/api/routes.go:L9-L54; backend/internal/db/schema.go:L11-L68</p>
       </section>
 
       <!-- ================= SLIDE 4 — DIVIDER: ARCHITECTURE ================= -->
       <section class="slide-divider">
-        <span class="hero-icon"><i data-lucide="network"></i></span>
+        <span class="hero-icon" aria-hidden="true"><i data-lucide="network"></i></span>
         <span class="eyebrow">Act One</span>
         <h2>Architecture</h2>
       </section>
@@ -610,19 +719,22 @@
       <!-- ================= SLIDE 5 — CURRENT SCAFFOLD (Fig A1) ================= -->
       <section>
         <span class="eyebrow">Before</span>
-        <h2>Current Implemented Scaffold</h2>
+        <h2>Current Scaffold — Source-Present, Not Buildable</h2>
         <p class="fig-caption"><strong>Figure A1</strong> maps the backend as wired today: the request path
-          (router&nbsp;&rarr;&nbsp;services&nbsp;&rarr;&nbsp;database) is implemented, while dashed boxes mark
-          packages that are imported but absent and the wiring that breaks startup.</p>
+          (router&nbsp;&rarr;&nbsp;services&nbsp;&rarr;&nbsp;database) is source-present but does not compile, while
+          dashed boxes mark packages that are imported but absent and the wiring that breaks startup — so nothing
+          runs today.</p>
         <pre class="mermaid">
 flowchart TD
+    accTitle: Current backend scaffold, as wired today
+    accDescr: The request path from HTTP client to router to core services to the database is source-present but does not compile. Dashed boxes mark packages imported but absent (config, logger, blockchain, custodian), the SetupRouter argument mismatch, and the task ticker that panics at startup, so nothing runs today.
     subgraph Legend_A1["Legend"]
-        L1["Solid box = implemented package"]
+        L1["Solid box = source-present package (does not compile)"]
         L2["Dashed box = imported but ABSENT / broken wiring"]
     end
-    Client["HTTP Client / Frontend"] --> Router["internal/api routes + handlers (implemented)"]
-    Router --> Core["internal/core: vault, transaction, signature (implemented)"]
-    Core --> DB["internal/db: postgres.go, redis.go, schema.go (implemented)"]
+    Client["HTTP Client / Frontend"] --> Router["internal/api routes + handlers (source-present)"]
+    Router --> Core["internal/core: vault, transaction, signature (source-present)"]
+    Core --> DB["internal/db: postgres.go, redis.go, schema.go (source-present)"]
     Main["cmd/server/main.go (composition root)"] -.->|"SetupRouter 4 args vs 0 args"| Router
     Main -.-> Cfg["internal/config (ABSENT)"]
     Main -.-> Log["pkg/logger (ABSENT)"]
@@ -630,6 +742,7 @@ flowchart TD
     Main -.-> Cust["internal/custodian (ABSENT)"]
     Core -.-> Tasks["internal/tasks tickers (panic: interval=0)"]
         </pre>
+        <p class="source-note"><span class="src-label">Source</span>backend/cmd/server/main.go:L52; backend/internal/api/routes.go:L9</p>
       </section>
 
       <!-- ================= SLIDE 6 — DESIGNED TARGET (Fig A2) ================= -->
@@ -640,8 +753,10 @@ flowchart TD
           logging, blockchain, and custodian packages and corrects the router and settlement-ticker wiring.</p>
         <pre class="mermaid">
 flowchart TD
+    accTitle: Designed target architecture, fully wired
+    accDescr: The designed target adds the currently-absent configuration, logging, blockchain and custodian packages, introduces ports for the blockchain and custodian clients plus a Kafka fan-out, and corrects the router and settlement-ticker wiring so the request path, core services, database and background tasks are all connected.
     subgraph Legend_A2["Legend"]
-        M1["Solid box = target implemented component"]
+        M1["Solid box = target component (fully wired)"]
         M2["Solid arrow = runtime dependency"]
     end
     Client["HTTP Client / Frontend"] --> Router["internal/api (router + middleware + correlation ID)"]
@@ -656,32 +771,35 @@ flowchart TD
     Main --> Log["pkg/logger (Logrus + correlation IDs)"]
     Main --> Router
         </pre>
+        <p class="source-note"><span class="src-label">Source</span>documentation/Technical Specifications.md &sect;5.1 (designed target)</p>
       </section>
 
       <!-- ================= SLIDE 7 — WHAT'S REAL TODAY (STATUS TABLE) ================= -->
       <section>
         <span class="eyebrow">Honest Status</span>
         <h2>What's Real Today</h2>
-        <p class="fig-caption">Every capability is labeled by maturity: <strong>Implemented</strong> runs today,
-          <strong>Provisioned</strong> is present but mis-wired, <strong>Designed</strong> is planned and absent.</p>
+        <p class="fig-caption">Maturity is labelled honestly: <strong>Source-present</strong> means the code exists
+          but does not compile; <strong>Designed</strong> means planned and absent. Nothing runs today — the backend
+          has no build manifest and every package carries a compile-blocking defect.</p>
         <table>
           <thead>
             <tr><th>Capability</th><th>Status</th></tr>
           </thead>
           <tbody>
-            <tr><td>REST routing &amp; request handlers</td><td><span class="pill pill-impl">Implemented</span></td></tr>
-            <tr><td>Core services &amp; database layer</td><td><span class="pill pill-impl">Implemented</span></td></tr>
-            <tr><td>Background settlement &amp; signature processors</td><td><span class="pill pill-prov">Provisioned</span></td></tr>
+            <tr><td>REST routing &amp; request handlers</td><td><span class="pill pill-source">Source-present</span></td></tr>
+            <tr><td>Core services &amp; database layer</td><td><span class="pill pill-source">Source-present</span></td></tr>
+            <tr><td>Background settlement &amp; signature processors</td><td><span class="pill pill-source">Source-present</span></td></tr>
             <tr><td>Blockchain, custodian, config &amp; logging packages</td><td><span class="pill pill-designed">Designed</span></td></tr>
             <tr><td>Kafka event fan-out</td><td><span class="pill pill-designed">Designed</span></td></tr>
           </tbody>
         </table>
+        <p class="source-note"><span class="src-label">Source</span>backend/cmd/server/main.go:L52; backend/internal/tasks/transaction_processor.go:L13-L16</p>
       </section>
 
       <!-- ================= SLIDE 8 — DATA MODEL (TABLE) ================= -->
       <section>
         <span class="eyebrow">Data Model</span>
-        <h2><span class="kpi-icon" style="vertical-align:-0.15em;margin-right:.3em"><i data-lucide="database"></i></span>The Domain in Five Entities</h2>
+        <h2><span class="kpi-icon h2-icon" aria-hidden="true"><i data-lucide="database"></i></span>The Domain in Five Entities</h2>
         <table>
           <thead>
             <tr><th>Entity</th><th>Purpose</th><th>Key relationships</th></tr>
@@ -695,11 +813,12 @@ flowchart TD
           </tbody>
         </table>
         <p class="fig-caption">A documented data-model cleanup item: each entity carries two identifiers, flagged for engineering follow-up.</p>
+        <p class="source-note"><span class="src-label">Source</span>backend/internal/db/schema.go:L11-L68</p>
       </section>
 
       <!-- ================= SLIDE 9 — DIVIDER: PROCESSING & OPERATIONS ================= -->
       <section class="slide-divider">
-        <span class="hero-icon"><i data-lucide="workflow"></i></span>
+        <span class="hero-icon" aria-hidden="true"><i data-lucide="workflow"></i></span>
         <span class="eyebrow">Act Two</span>
         <h2>Processing &amp; Operations</h2>
       </section>
@@ -709,12 +828,14 @@ flowchart TD
         <span class="eyebrow">Data Flow</span>
         <h2>How Transactions Settle</h2>
         <p class="fig-caption">The <strong>asynchronous settlement flow</strong> splits fast request handling from
-          background settlement. The create path is implemented; the automatic settlement step is currently blocked by a
-          startup wiring defect the documentation flags for the team.</p>
+          background settlement. The create path is source-present but does not compile, and the automatic settlement
+          step cannot run — it is blocked by an uninitialized-ticker panic the documentation flags for the team.</p>
         <pre class="mermaid">
 flowchart LR
+    accTitle: Designed asynchronous transaction settlement flow
+    accDescr: A create request persists a transaction as Pending; a background ticker processor is designed to update the status to Processed and cache it to Redis. This path is source-present but does not compile, and the ticker step is blocked today by an uninitialized-interval panic.
     subgraph Legend_Async["Legend"]
-        LA1["Solid = implemented path"]
+        LA1["Solid = source-present path (does not compile)"]
         LA2["Dashed = blocked today (interval=0 panic)"]
     end
     API["POST /transactions/create"] --> Save["Persist Transaction (status = Pending)"]
@@ -723,6 +844,7 @@ flowchart LR
     Proc --> Update["Update status = Processed"]
     Update --> Cache["Cache to Redis (tx:&amp;lt;id&amp;gt;)"]
         </pre>
+        <p class="source-note"><span class="src-label">Source</span>backend/internal/tasks/transaction_processor.go:L13-L16</p>
       </section>
 
       <!-- ================= SLIDE 11 — RISKS & MITIGATIONS (TABLE) ================= -->
@@ -736,31 +858,34 @@ flowchart LR
           <tbody>
             <tr><td>Startup wiring defects — router signature <code>SetupRouter()</code>, ticker <code>time.NewTicker(0)</code></td><td>Documented with exact locations for engineering follow-up</td></tr>
             <tr><td>API path disagreement across layers — <code>/vault</code> vs <code>/vaults</code></td><td>Reconciled in the API reference</td></tr>
-            <tr><td>Outdated project README — wrong stack, dead links</td><td>Corrected, with navigation to the new docs</td></tr>
+            <tr><td>Outdated project README — wrong stack, dead links</td><td>Correction documented; README update pending as a separate deliverable</td></tr>
           </tbody>
         </table>
         <div class="icon-row">
-          <div><i data-lucide="alert-triangle"></i><span>Identified</span></div>
-          <div><i data-lucide="git-branch"></i><span>Reconciled</span></div>
-          <div><i data-lucide="check-circle"></i><span>Corrected</span></div>
+          <div><i data-lucide="alert-triangle" aria-hidden="true"></i><span>Identified</span></div>
+          <div><i data-lucide="git-branch" aria-hidden="true"></i><span>Reconciled</span></div>
+          <div><i data-lucide="check-circle" aria-hidden="true"></i><span>Documented</span></div>
         </div>
+        <p class="source-note"><span class="src-label">Source</span>backend/cmd/server/main.go:L52; frontend/src/services/api.ts; README.md</p>
       </section>
 
       <!-- ================= SLIDE 12 — OBSERVABILITY (Fig O1) ================= -->
       <section>
         <span class="eyebrow">Operations</span>
         <h2>Observability: Reused vs. Added</h2>
-        <p class="fig-caption"><strong>Figure O1</strong> contrasts what emits today with the five designed pillars —
-          structured logging with correlation IDs, distributed tracing, a <code>/metrics</code> endpoint,
-          health/readiness checks, and a dashboard template.</p>
+        <p class="fig-caption"><strong>Figure O1</strong> contrasts the source-present emission points with the five
+          designed pillars — structured logging with correlation IDs, distributed tracing, a <code>/metrics</code>
+          endpoint, health/readiness checks, and a dashboard template.</p>
         <pre class="mermaid">
 flowchart LR
+    accTitle: Observability, source-present today versus the designed target
+    accDescr: Today's observability is source-present emission code only that does not compile: Gin access logging, worker structured logs that depend on an absent pkg/logger, frontend console logs, and database liveness pings. The designed target adds correlation-ID middleware, distributed tracing, a metrics endpoint, health and readiness checks, log aggregation, alerting, and a dashboard template.
     subgraph Legend_O1["Legend"]
-        LG1["Solid box = implemented / emitting today"]
+        LG1["Solid box = source-present emission code (does not compile)"]
         LG2["Dashed box = imported but ABSENT (does not compile)"]
         LG3["Rounded box = Designed / added (absent today)"]
     end
-    subgraph Current["Current - Implemented (emission-only today)"]
+    subgraph Current["Current - Source-present (emission code, does not compile)"]
         direction TB
         C_API["Gin router: gin.Logger() + gin.Recovery()"]
         C_WORK["Task workers: logger.Error(...) structured logs"]
@@ -789,6 +914,7 @@ flowchart LR
     end
     Current ==>|"gaps closed by design"| Designed
         </pre>
+        <p class="source-note"><span class="src-label">Source</span>backend/internal/api/routes.go; backend/internal/tasks/*; documentation/Technical Specifications.md &sect;6.5</p>
       </section>
 
       <!-- ================= SLIDE 13 — DEPLOYMENT TOPOLOGY (Fig O2) ================= -->
@@ -799,6 +925,8 @@ flowchart LR
           PostgreSQL, ElastiCache Redis, MSK Kafka, and S3. Dashed boxes are resources referenced but not yet defined.</p>
         <pre class="mermaid">
 flowchart TD
+    accTitle: Designed AWS deployment topology
+    accDescr: The designed AWS target routes internet traffic through Route53 and an ALB to an ECS Fargate service, backed by RDS PostgreSQL, ElastiCache Redis, MSK Kafka and S3. Solid boxes are resources defined in main.tf; dashed boxes are resources referenced but not yet defined, including target groups, task definitions, security groups and IAM roles.
     subgraph Legend_O2["Legend"]
         LG1["Solid box = resource DEFINED in main.tf"]
         LG2["Dashed box = resource REFERENCED but NOT defined"]
@@ -821,11 +949,12 @@ flowchart TD
     KAFKA -.-> SGK["aws_security_group.kafka (ABSENT)"]
     SVC -.-> IAM["IAM role / CloudWatch logs (ABSENT)"]
         </pre>
+        <p class="source-note"><span class="src-label">Source</span>infrastructure/terraform/main.tf; documentation/Technical Specifications.md &sect;8</p>
       </section>
 
       <!-- ================= SLIDE 14 — DIVIDER: SECURITY & READINESS ================= -->
       <section class="slide-divider">
-        <span class="hero-icon"><i data-lucide="shield"></i></span>
+        <span class="hero-icon" aria-hidden="true"><i data-lucide="shield"></i></span>
         <span class="eyebrow">Act Three</span>
         <h2>Security &amp; Readiness</h2>
       </section>
@@ -835,31 +964,29 @@ flowchart TD
         <span class="eyebrow">Security &amp; Business Value</span>
         <h2>Secure by Design</h2>
         <ul>
-          <li>Role-based access control across five roles.</li>
-          <li>JWT access tokens (15-minute) with refresh.</li>
-          <li>Multi-factor authentication.</li>
-          <li>Encryption at rest and in transit, with audit logging.</li>
+          <li>RBAC, JWT with refresh, and multi-factor authentication &mdash; all Designed.</li>
+          <li>Encryption and audit logging are specified, not yet enforced in code.</li>
         </ul>
         <div class="icon-row">
-          <div><i data-lucide="lock"></i><span>Encryption</span></div>
-          <div><i data-lucide="key"></i><span>JWT + MFA</span></div>
-          <div><i data-lucide="shield"></i><span>RBAC</span></div>
+          <div><i data-lucide="lock" aria-hidden="true"></i><span>Encryption</span></div>
+          <div><i data-lucide="key" aria-hidden="true"></i><span>JWT + MFA</span></div>
+          <div><i data-lucide="shield" aria-hidden="true"></i><span>RBAC</span></div>
         </div>
-        <p class="designed-note"><strong>Designed goals</strong> — 99.99% uptime, 10,000 requests/second, and
-          sub-100ms p95 latency are targets, not delivered.</p>
+        <p class="designed-note"><strong>Designed goals</strong> &mdash; 99.99% uptime, 10k req/s, sub-100ms p95 &mdash; targets, not delivered.</p>
+        <p class="source-note"><span class="src-label">Source</span>backend/internal/api/handlers/auth.go; documentation/Technical Specifications.md &sect;6.4 (Designed)</p>
       </section>
 
       <!-- ================= SLIDE 16 — CLOSING ================= -->
       <section class="slide-closing">
         <span class="eyebrow">The Takeaway</span>
-        <h2>Documented. Honest. Ready to Build.</h2>
+        <h2>Documented. Honest. Remediation-Ready.</h2>
         <ul>
-          <li>Engineering resolves the flagged startup wiring defects.</li>
-          <li>Continue toward the designed target architecture.</li>
+          <li>Not buildable yet &mdash; the flagged startup wiring defects come first.</li>
+          <li>Then continue toward the designed target architecture.</li>
           <li>Optionally publish the documentation site.</li>
         </ul>
         <hr class="accent-bar">
-        <span class="brand-lockup"><i data-lucide="check-circle"></i> Blitzy</span>
+        <span class="brand-lockup"><i data-lucide="check-circle" aria-hidden="true"></i> Blitzy</span>
       </section>
 
     </div>
@@ -869,6 +996,10 @@ flowchart TD
        Third-party libraries — pinned CDN versions (reveal.js 5.1.0, Lucide 0.460.0).
        Classic scripts run during parsing, so the Reveal and lucide globals are
        available before the deferred ES module below executes.
+       SRI: add integrity="sha384-…" crossorigin="anonymous" to both <script>s and
+       to the Mermaid ESM import below once the digests can be verified against the
+       live CDN (see the Content Security Policy note in <head>; omitted offline so
+       a stale hash cannot silently break the deck).
        ========================================================================== -->
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js"></script>
@@ -888,10 +1019,24 @@ flowchart TD
     //     default clips them. Raising it to 600px lets each label box grow to its full
     //     single-line width (our widest label is ~430px). useMaxWidth then scales the
     //     whole SVG to fit the slide.
+    // Security (F7-DECKSEC-001): securityLevel 'antiscript' rather than 'loose'.
+    //   * 'antiscript' keeps HTML labels enabled (htmlLabels:true) — required for the
+    //     Inter font-measurement path that prevents node-label clipping — while
+    //     stripping any <script> from label text, removing the script-injection
+    //     surface that 'loose' leaves open. All diagram source here is static and
+    //     author-controlled (no user input), so this is a pure hardening with no
+    //     rendering regression.
+    //   * Mermaid 11.4.0 is a MANDATED pin (AAP Section 0.10.2) and cannot be upgraded,
+    //     so any Mermaid-level advisory cannot be patched by bumping the version.
+    //     RESIDUAL RISK is therefore accepted and compensated by (a) 'antiscript'
+    //     sanitisation, (b) the restrictive Content-Security-Policy in <head> that
+    //     confines executable/style/font origins to the pinned CDN + Google Fonts,
+    //     and (c) the static, no-user-input nature of the deck. A version bump (once
+    //     the AAP pin is lifted) plus SRI on the CDN assets is the Designed hardening.
     mermaid.initialize({
       startOnLoad: false,
       theme: 'base',
-      securityLevel: 'loose',
+      securityLevel: 'antiscript',
       fontFamily: "'Inter', system-ui, sans-serif",
       flowchart: {
         htmlLabels: true,

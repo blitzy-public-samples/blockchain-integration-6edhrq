@@ -1,5 +1,5 @@
 {
-  "__doc__": "Observability dashboard TEMPLATE for the Blockchain Integration Service and Dashboard. Grafana-compatible dashboard model (schemaVersion 39). MATURITY: this template is DESIGNED. Panels marked 'Designed' depend on capabilities that are absent today (correlation-ID middleware, OpenTelemetry tracing, /metrics, /health, /ready). Panels marked 'Implemented (reused)' bind to signals that are emitted today (gin.Logger/gin.Recovery access+panic logs; tasks logger.Error worker logs to stdout), with the caveat that pkg/logger is imported but absent (Source: backend/cmd/server/main.go:L10). See docs/operations/observability.md (Fig O1) and docs/operations/runbook.md. Grounded in documentation/Technical Specifications.md (THIRD-PARTY SERVICES: Amazon CloudWatch) and AAP Observability rule (0.10.3).",
+  "__doc__": "Observability dashboard TEMPLATE for the Blockchain Integration Service and Dashboard. Grafana-compatible dashboard model (schemaVersion 39). MATURITY: this template is DESIGNED. Panels marked 'Designed' depend on capabilities that are absent today (correlation-ID middleware, OpenTelemetry tracing, /metrics, /health, /ready). Panels bound to source-present call sites (the tasks logger.Error worker logs) are labeled 'Source-present (non-buildable)': those call sites exist in the repository but depend on the ABSENT pkg/logger package (Source: backend/cmd/server/main.go:L10) and the backend does not compile, so NO panel binds to a signal that is emitted today. All other panels are 'Designed' (their capability is absent). See docs/operations/observability.md (Fig O1) and docs/operations/runbook.md. Grounded in documentation/Technical Specifications.md (THIRD-PARTY SERVICES: Amazon CloudWatch) and AAP Observability rule (0.10.3).",
   "annotations": {
     "list": [
       {
@@ -104,15 +104,15 @@
     {
       "id": 7,
       "type": "row",
-      "title": "Background Workers (Implemented emission / Designed metrics)",
+      "title": "Background Workers (Source-present call sites, non-buildable / Designed metrics)",
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
       "collapsed": false
     },
     {
       "id": 8,
       "type": "logs",
-      "title": "Worker Errors - transaction + signature processors (Implemented, reused)",
-      "description": "Maturity: Implemented (reused, emission-only). Binds to structured worker logs emitted via logger.Error in the processors (Source: backend/internal/tasks/transaction_processor.go:L26,L44,L50,L57; backend/internal/tasks/signature_processor.go:L25,L42,L48,L53,L57). Caveat: pkg/logger is imported but absent (Source: backend/cmd/server/main.go:L10), and there is no aggregation today - logs go to stdout.",
+      "title": "Worker Errors - transaction + signature processors (Source-present, non-buildable)",
+      "description": "Maturity: Source-present (non-buildable). Binds to the logger.Error call sites on the processors' error paths (Source: backend/internal/tasks/transaction_processor.go:L26,L44,L50,L57; backend/internal/tasks/signature_processor.go:L25,L42,L48,L53,L57). These call the ABSENT pkg/logger package (Source: backend/cmd/server/main.go:L10) and the backend does not compile, so no log line is emitted today; log format and destination are therefore unverified and there is no aggregation. Nothing populates this panel at this checkpoint.",
       "datasource": { "type": "loki", "uid": "${datasource_logs}" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
       "options": { "showLabels": true, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
@@ -131,8 +131,8 @@
     {
       "id": 10,
       "type": "stat",
-      "title": "Signature Processor Poll Interval (Implemented = 5m)",
-      "description": "Maturity: Implemented. The signature processor polls on a fixed 5-minute ticker (Source: backend/internal/tasks/signature_processor.go:L13 const signatureCheckInterval = 5 * time.Minute). Shown for reference; a Designed metric would confirm last successful poll.",
+      "title": "Signature Processor Poll Interval (source-present const = 5m)",
+      "description": "Maturity: Source-present (non-buildable). The signature processor's poll interval is a source-present constant of 5 minutes (Source: backend/internal/tasks/signature_processor.go:L13 const signatureCheckInterval = 5 * time.Minute), but the tasks package does not compile so no poll runs today. Shown for reference; a Designed last-successful-poll metric (see runbook.md FM-3) is required to confirm liveness.",
       "datasource": { "type": "prometheus", "uid": "${datasource_metrics}" },
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 23 },
       "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },

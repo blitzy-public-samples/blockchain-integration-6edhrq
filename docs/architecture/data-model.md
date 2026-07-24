@@ -2,14 +2,15 @@
 
 The Blockchain Integration Service and Dashboard persists five entities — **Organization**, **User**, **Vault**, **Transaction**, and **Signature** — that model the custodial domain of organizations onboarding users who operate vaults to initiate transactions and request signatures. PostgreSQL is the system of record for all five entities. `Source: backend/internal/db/schema.go:L11-L68`, `Source: backend/internal/db/postgres.go:L1-L33`.
 
-The entity **structs are Implemented** in the sense that they are declared as Go/GORM models in code — a *declared-in-source* status, not a claim that the model compiles or runs today. In fact, `schema.go` does not currently compile: it declares each `Metadata` field as `gorm.JSONMap`, a type that is **undefined in `gorm.io/gorm`** (Defect 4), so the entity structs cannot be built or exercised as-declared. `Source: backend/internal/db/schema.go:L39,L53,L65`. Separately, the **physical persistence wiring is Provisioned**: even setting the compile defect aside, the `db` package initializes a `sqlx` connection and defines no GORM `AutoMigrate`, `Repository`, or migrations, so the structs are not yet bound to a live schema. `Source: backend/internal/db/postgres.go:L10-L18`. The full defect catalog and cross-page reconciliation live in [`scaffold-vs-design.md`](scaffold-vs-design.md).
+The entity **structs are source-present (non-buildable)** in the sense that they are declared as Go/GORM models in code — a *declared-in-source* status, not a claim that the model compiles or runs today. In fact, `schema.go` does not currently compile: it declares each `Metadata` field as `gorm.JSONMap`, a type that is **undefined in `gorm.io/gorm`** (Defect 4), so the entity structs cannot be built or exercised as-declared. `Source: backend/internal/db/schema.go:L39,L53,L65`. Separately, the **physical persistence wiring is Provisioned**: even setting the compile defect aside, the `db` package initializes a `sqlx` connection and defines no GORM `AutoMigrate`, `Repository`, or migrations, so the structs are not yet bound to a live schema. `Source: backend/internal/db/postgres.go:L10-L18`. The full defect catalog and cross-page reconciliation live in [`scaffold-vs-design.md`](scaffold-vs-design.md).
 
 ## Maturity Legend
 
 Every capability and field-set in this reference is labeled with the project-wide maturity discipline:
 
-- **Implemented** — present and functional in the code as-declared today.
-- **Provisioned** — scaffolding or configuration exists, but the capability is not yet fully wired to run.
+- **Implemented** — present in code, building, and functional today. This is the operational-truth definition adopted across the entire documentation set; it is **reserved**, and at this checkpoint **nothing in this repository qualifies for it** (the backend has no `go.mod` and `schema.go` does not compile). `Source: backend/internal/db/schema.go:L39,L53,L65`.
+- **Implemented-with-defects (source-present, non-buildable)** — the code exists as declared in source but does **not** compile, so no runtime behavior may be claimed. Every entity struct in this reference carries this status, never the unqualified **Implemented**. This matches the single operational-truth vocabulary defined in [`scaffold-vs-design.md`](scaffold-vs-design.md).
+- **Provisioned** — configuration or scaffolding exists but is not yet wired to run (for example, the `db` package opens a `sqlx` connection but defines no `AutoMigrate`, `Repository`, or migrations).
 - **Designed** — specified in the design corpus (`documentation/*.md`), not yet present in code.
 
 The consolidated Implemented / Provisioned / Designed matrix that reconciles the design corpus with the on-disk scaffold is maintained in [`scaffold-vs-design.md`](scaffold-vs-design.md).
@@ -86,15 +87,15 @@ Mermaid `erDiagram` does not support an in-diagram legend, so the notation is ex
 
 - **`||--o{`** — a one-to-mandatory to zero-or-many relationship: exactly one parent record relates to zero or more child records (i.e. one parent "has many" children). The label in quotes (`"has"`, `"owns"`, `"initiates"`, `"requests"`, `"processes"`, `"generates"`) names the relationship.
 - **`PK`** — primary key column.
-- **`FK`** — foreign-key column referencing a parent entity's primary key.
+- **`FK`** — a logical foreign-key *association*: a UUID field on the child entity (for example `OrganizationID`, `UserID`, `VaultID`) that names its parent by convention. This is a modeling notation only — the code declares these as plain `uuid.UUID` fields with **no** database foreign-key constraint, and no migration exists to create one (the `db` package opens a `sqlx` connection with no `AutoMigrate`). Referential integrity is therefore **Designed**, not enforced today. `Source: backend/internal/db/schema.go:L20-L68`, `Source: backend/internal/db/postgres.go:L10-L18`.
 - **Type tokens map to Go types** as declared in code: `uuid` -> `uuid.UUID`, `string` -> `string`, `decimal` -> `decimal.Decimal`, `time` -> `time.Time`, and `JSONMap` -> `gorm.JSONMap` (a JSONB column). `Source: backend/internal/db/schema.go:L11-L68`.
 - The diagram reflects the code **as-declared**, including the `"also embeds gorm.Model.ID (uint) - dual identifier"` annotation on `ORGANIZATION.ID`. That annotation applies to every entity and is explained in [Gap Notes](#gap-notes). `Source: backend/internal/db/schema.go:L11-L18`.
 
 ## Entity Field Reference
 
-Each of the five entities is a GORM struct that embeds `gorm.Model` and then redeclares a UUID `ID` together with `CreatedAt`/`UpdatedAt`. The **(Implemented)** tag on each entity heading below denotes *declared-in-source* status — the struct is written in code — and not that it compiles or runs today; as noted above and in the [Gap Notes](#gap-notes), `schema.go` does not currently compile because `Metadata gorm.JSONMap` is an undefined type in `gorm.io/gorm` (Defect 4). The tables below reproduce every field exactly as declared — Go field name, Go type, key/constraint, and notes — with no invented fields. `Source: backend/internal/db/schema.go:L39,L53,L65`.
+Each of the five entities is a GORM struct that embeds `gorm.Model` and then redeclares a UUID `ID` together with `CreatedAt`/`UpdatedAt`. The **(Source-present, non-buildable)** tag on each entity heading below denotes *declared-in-source* status — the struct is written in code — and not that it compiles or runs today; as noted above and in the [Gap Notes](#gap-notes), `schema.go` does not currently compile because `Metadata gorm.JSONMap` is an undefined type in `gorm.io/gorm` (Defect 4). The tables below reproduce every field exactly as declared — Go field name, Go type, key/constraint, and notes — with no invented fields. `Source: backend/internal/db/schema.go:L39,L53,L65`.
 
-### Organization (Implemented)
+### Organization (Source-present, non-buildable)
 
 `Source: backend/internal/db/schema.go:L11-L18`.
 
@@ -107,7 +108,7 @@ Each of the five entities is a GORM struct that embeds `gorm.Model` and then red
 | `CreatedAt` | `time.Time` | — | Redeclares `gorm.Model.CreatedAt`. |
 | `UpdatedAt` | `time.Time` | — | Redeclares `gorm.Model.UpdatedAt`. |
 
-### User (Implemented)
+### User (Source-present, non-buildable)
 
 `Source: backend/internal/db/schema.go:L20-L30`.
 
@@ -123,7 +124,7 @@ Each of the five entities is a GORM struct that embeds `gorm.Model` and then red
 | `CreatedAt` | `time.Time` | — | Redeclares `gorm.Model.CreatedAt`. |
 | `UpdatedAt` | `time.Time` | — | Redeclares `gorm.Model.UpdatedAt`. |
 
-### Vault (Implemented)
+### Vault (Source-present, non-buildable)
 
 `Source: backend/internal/db/schema.go:L32-L42`.
 
@@ -139,7 +140,7 @@ Each of the five entities is a GORM struct that embeds `gorm.Model` and then red
 | `CreatedAt` | `time.Time` | — | Redeclares `gorm.Model.CreatedAt`. |
 | `UpdatedAt` | `time.Time` | — | Redeclares `gorm.Model.UpdatedAt`. |
 
-### Transaction (Implemented)
+### Transaction (Source-present, non-buildable)
 
 `Source: backend/internal/db/schema.go:L44-L56`.
 
@@ -157,7 +158,7 @@ Each of the five entities is a GORM struct that embeds `gorm.Model` and then red
 | `CreatedAt` | `time.Time` | — | Redeclares `gorm.Model.CreatedAt`. |
 | `UpdatedAt` | `time.Time` | — | Redeclares `gorm.Model.UpdatedAt`. |
 
-### Signature (Implemented)
+### Signature (Source-present, non-buildable)
 
 `Source: backend/internal/db/schema.go:L58-L68`.
 
@@ -181,7 +182,7 @@ Each of the five entities is a GORM struct that embeds `gorm.Model` and then red
 
 ## Relationships
 
-The six relationships depicted in **Fig M1 — Data Model ERD** are all one-to-many, inferred from the foreign-key fields declared on the child entities. `Source: backend/internal/db/schema.go:L20-L68`.
+The six relationships depicted in **Fig M1 — Data Model ERD** are all one-to-many, inferred from the UUID association fields (modeled as foreign keys) declared on the child entities. These associations are logical only: no database foreign-key constraint enforces them, because `schema.go` does not compile and the `db` package defines no migrations. `Source: backend/internal/db/schema.go:L20-L68`, `Source: backend/internal/db/postgres.go:L10-L18`.
 
 - **Organization 1..\* User** — an organization *has* many users; each user carries an `OrganizationID`. `Source: backend/internal/db/schema.go:L23`.
 - **Organization 1..\* Vault** — an organization *owns* many vaults; each vault carries an `OrganizationID`. `Source: backend/internal/db/schema.go:L35`.
@@ -190,17 +191,17 @@ The six relationships depicted in **Fig M1 — Data Model ERD** are all one-to-m
 - **Vault 1..\* Transaction** — a vault *processes* many transactions; each transaction carries a `VaultID`. `Source: backend/internal/db/schema.go:L48`.
 - **Vault 1..\* Signature** — a vault *generates* many signatures; each signature carries a `VaultID`. `Source: backend/internal/db/schema.go:L62`.
 
-**Multi-tenancy.** Tenancy is enforced through the foreign keys: Users and Vaults are scoped by `OrganizationID`, while Transactions and Signatures are scoped by both `UserID` and `VaultID`, tying every operational record back to both the acting user and the vault it touches. `Source: backend/internal/db/schema.go:L20-L68`.
+**Multi-tenancy.** The data model *represents* tenancy through UUID association fields — Users and Vaults carry an `OrganizationID`, while Transactions and Signatures carry both a `UserID` and a `VaultID`, logically tying every operational record back to the acting user and the vault it touches. `Source: backend/internal/db/schema.go:L20-L68`. However, nothing in the current code **enforces** that tenant isolation: (1) there are no database foreign-key constraints and no migrations, and `schema.go` does not compile, so the fields exist only as plain `uuid.UUID` columns with no referential integrity `Source: backend/internal/db/schema.go:L39,L53,L65`, `Source: backend/internal/db/postgres.go:L10-L18`; (2) the `db` package defines no `Repository` layer that would scope queries by `OrganizationID`, so no data-access path filters records by tenant `Source: backend/internal/db/postgres.go:L10-L18`; and (3) there is no authorization boundary in the request path that checks a caller's organization against the record being accessed (the `internal/api/middleware` package that would carry such a check is absent — see [`scaffold-vs-design.md`](scaffold-vs-design.md)). Tenant isolation is therefore **Designed** — the fields to support it are declared in source, but the constraints, repository scoping, and authorization checks that would make it an enforced guarantee do not exist today.
 
 ## Gap Notes
 
 The following model-level gaps are **documented honestly and are not fixed** by this deliverable; they describe the current state of the code as-declared. Each is expanded in [`scaffold-vs-design.md`](scaffold-vs-design.md).
 
-### Undefined `gorm.JSONMap` type — schema does not compile (Implemented defect)
+### Undefined `gorm.JSONMap` type — schema does not compile (source-present defect)
 
 Every entity that carries a `Metadata` column declares it as `gorm.JSONMap`, but `gorm.JSONMap` is an **undefined type in `gorm.io/gorm`**. Because the type does not exist in the imported package, `schema.go` does not compile, and consequently none of the five entity structs can be built or exercised as-declared today. This is the compile-blocking defect catalogued as **Defect 4** in [`scaffold-vs-design.md`](scaffold-vs-design.md); the dual-identifier conflict below likewise cannot be exercised until it is resolved. `Source: backend/internal/db/schema.go:L39,L53,L65`.
 
-### Dual-identifier inconsistency (Implemented defect)
+### Dual-identifier inconsistency (source-present defect)
 
 Every entity embeds `gorm.Model` — which itself provides `ID uint`, `CreatedAt`, `UpdatedAt`, and `DeletedAt` — **and** redeclares `ID uuid.UUID`, `CreatedAt time.Time`, and `UpdatedAt time.Time`. This creates conflicting primary-key semantics (`uint` versus `uuid`) and duplicate timestamp fields that GORM cannot map cleanly. `Source: backend/internal/db/schema.go:L11-L18` (Organization is representative; all five entities share the pattern).
 
@@ -215,7 +216,7 @@ The backend Transaction status vocabulary is `Pending` / `Processed`, set via th
 
 ### No migrations / mixed persistence (Provisioned)
 
-The `db` package initializes a `sqlx` connection and defines no GORM `AutoMigrate` and no `Repository`, so these GORM structs are not yet bound to a live physical schema. `Source: backend/internal/db/postgres.go:L10-L18`. The logical entity model above is therefore **Implemented** at the struct level, while the **physical schema is Designed/Provisioned** until migration wiring is added.
+The `db` package initializes a `sqlx` connection and defines no GORM `AutoMigrate` and no `Repository`, so these GORM structs are not yet bound to a live physical schema. `Source: backend/internal/db/postgres.go:L10-L18`. The logical entity model above is therefore **source-present (non-buildable)** at the struct level, while the **physical schema is Designed/Provisioned** until migration wiring is added.
 
 ## Design vs. Code
 

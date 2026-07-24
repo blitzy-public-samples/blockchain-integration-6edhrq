@@ -2,7 +2,7 @@
 
 This runbook catalogs the alerts and failure modes for the **Blockchain Integration Service and Dashboard** backend and gives, for each, a **Detection → Diagnosis → Remediation** procedure. Consistent with the documentation-only scope, remediations are **documented, not applied** — no source code is changed by this deliverable, and known defects are recorded honestly rather than fixed.
 
-Maturity tags follow the project convention: **Implemented** (present in code today), **Provisioned** (infrastructure exists, not wired), **Designed** (specified but absent today). See [`observability.md`](observability.md) for the signal inventory (`Fig O1`) and [`dashboard-template.json`](dashboard-template.json) for the panels referenced below.
+Maturity tags follow the project convention (identical to [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md)): **Implemented** (present AND compiles AND runs today — reserved, and nothing here qualifies at this checkpoint), **Source-present (non-buildable)** (the code exists but does not compile, so no runtime behavior may be asserted), **Provisioned** (infrastructure exists and would validly apply, but is not wired), **Designed** (specified but absent today). The one signal genuinely observable today is the **build failure itself**. See [`observability.md`](observability.md) for the signal inventory (`Fig O1`) and [`dashboard-template.json`](dashboard-template.json) for the panels referenced below.
 
 ## Alert catalog
 
@@ -10,9 +10,9 @@ Maturity tags follow the project convention: **Implemented** (present in code to
 |-------|-------------------|--------------------|--------------|
 | Backend startup panic (latent, post-build) | Would panic when the ticker is constructed, once the module builds; not reproducible today | Latent (present in code; not observable today — the image build fails first, see FM-4) | FM-1 Uninitialized ticker panic |
 | Settlement lag rising | Transactions remain `Pending` beyond threshold | Designed (needs `/metrics`) | FM-2 Settlement retry behavior |
-| Signature poll stalled | No signature poll log within two intervals | Implemented emission / Designed metric | FM-3 Signature processor poll |
-| Build/boot failure | Compilation or wiring error before serving | Implemented (build output) | FM-4 Processor & router wiring mismatch |
-| Container reported healthy while broken | Orchestrator lacks health signal | Designed (needs HEALTHCHECK) | FM-5 Container health-check gap |
+| Signature poll stalled | Last-successful-poll signal exceeds two intervals | Designed (no per-poll success log/metric exists today) | FM-3 Signature processor poll |
+| Build/boot failure | Compilation or wiring error before serving | Observable today (build failure) | FM-4 Processor & router wiring mismatch |
+| Running container never becomes ready | Readiness probe fails or is absent while the process stays up | Designed (needs `/ready` + HEALTHCHECK) | FM-5 Container health-check gap |
 
 ## FM-1 — Uninitialized ticker panic at startup
 
@@ -26,7 +26,7 @@ Maturity tags follow the project convention: **Implemented** (present in code to
 
 ## FM-2 — Settlement retry behavior (no backoff)
 
-**Maturity:** Implemented behavior (as-written), with Designed dependencies absent.
+**Maturity:** Source-present (non-buildable) behavior as-written; Designed dependencies absent.
 
 **Detection.** Transactions stay in status `Pending` and settlement lag climbs on the [`dashboard-template.json`](dashboard-template.json) settlement-lag panel (a Designed metric).
 
@@ -36,17 +36,17 @@ Maturity tags follow the project convention: **Implemented** (present in code to
 
 ## FM-3 — Signature processor poll interval
 
-**Maturity:** Implemented (emission-only) / Designed metric.
+**Maturity:** Designed detection. The `logger.Error(...)` call sites are source-present but non-buildable (they depend on the absent `pkg/logger`), and there is **no per-poll success or heartbeat log** to observe in the first place.
 
-**Detection.** No signature-processing log line appears within two poll intervals, or the signature-poll-interval stat on [`dashboard-template.json`](dashboard-template.json) is stale.
+**Detection (Designed — signal does not exist today).** The intuitive check "no signature-processing log line within two poll intervals" **cannot work as written**: the signature processor only calls `logger.Error(...)` on its *error* paths `Source: backend/internal/tasks/signature_processor.go:L25,L42,L48,L53,L57` — it emits nothing on a successful poll, so the absence of a log line is indistinguishable from a healthy idle poll. There is therefore no heartbeat to alert on. Detection requires a **Designed** "last successful poll" metric/log (a `signature_last_success_timestamp` gauge, or an explicit per-poll info log) that does not exist today; alert when that signal exceeds two intervals. Even the error-path logs emit nothing at present because `pkg/logger` is absent and the module does not compile `Source: backend/internal/tasks/signature_processor.go:L10`.
 
-**Diagnosis.** The signature processor polls on a fixed five-minute ticker `Source: backend/internal/tasks/signature_processor.go:L13`, emitting structured errors via `logger.Error(...)` `Source: backend/internal/tasks/signature_processor.go:L25,L42,L48,L53,L57`. A stalled poll indicates the worker goroutine exited or the process is down (see FM-1/FM-4).
+**Diagnosis.** The signature processor is coded to poll on a fixed five-minute ticker `Source: backend/internal/tasks/signature_processor.go:L13`; its only logging is `logger.Error(...)` on error branches `Source: backend/internal/tasks/signature_processor.go:L25,L42,L48,L53,L57`, with no success/heartbeat emission. Once the compile blockers (FM-4) and the missing success signal are addressed, a stalled poll would indicate the worker goroutine exited or the process is down (see FM-1/FM-4).
 
-**Remediation (documented, not applied).** Emit a "last successful poll" timestamp metric and alert when it exceeds two intervals. Documented only.
+**Remediation (documented, not applied).** Add a "last successful poll" timestamp metric (or an explicit per-poll info log) and alert when it exceeds two intervals; this Designed signal is the prerequisite for the detection above. Documented only.
 
 ## FM-4 — Processor and router wiring mismatch (does not build)
 
-**Maturity:** Implemented defect (blocks build/boot).
+**Maturity:** Source-present defect (blocks build/boot; observable today as a build failure).
 
 **Detection.** The service fails to build or to wire dependencies before it can serve requests.
 
@@ -58,9 +58,9 @@ Maturity tags follow the project convention: **Implemented** (present in code to
 
 **Maturity:** Designed (absent today).
 
-**Detection.** The orchestrator reports a container as healthy even when the process has panicked (FM-1), because no health signal is defined.
+**Detection.** Distinguish two cases. (1) A process that **panics or exits** — such as the FM-1 ticker panic — terminates its container; the orchestrator observes the non-zero exit and restarts/backs off the container, so an exited process is **not** reported healthy. (2) The uncovered gap is a container that **stays running but is degraded** — for example, the HTTP server is up but a dependency (PostgreSQL/Redis) is unreachable, or a background worker goroutine has died while the process lives. With **no** `HEALTHCHECK` and no readiness endpoint, the orchestrator has no signal for case (2) and keeps routing traffic to a running-but-not-ready container. (The earlier framing that a *panicked* container is reported healthy is incorrect: a panic exits the process.)
 
-**Diagnosis.** Neither Dockerfile declares a `HEALTHCHECK`; the backend image only exposes its port `Source: infrastructure/docker/Dockerfile.backend:L20`, and the frontend image likewise `Source: infrastructure/docker/Dockerfile.frontend:L26`. There are also no `/health` or `/ready` routes for a check to target `Source: backend/internal/api/routes.go:L9-L54`.
+**Diagnosis.** Neither Dockerfile declares a `HEALTHCHECK`; the backend image only exposes its port `Source: infrastructure/docker/Dockerfile.backend:L20`, and the frontend image likewise `Source: infrastructure/docker/Dockerfile.frontend:L26`. There are also no `/health` or `/ready` routes for a check to target `Source: backend/internal/api/routes.go:L9-L54`. Consequently the orchestrator can detect only whole-process exit (case 1), not running-but-degraded state (case 2).
 
 **Remediation (documented, not applied).** Add `/health` and `/ready` endpoints (readiness composing `db.Ping()` `Source: backend/internal/db/postgres.go:L27` and `redisClient.Ping(ctx)` `Source: backend/internal/db/redis.go:L21`) and a Dockerfile `HEALTHCHECK` targeting them. Documented only; see [`observability.md`](observability.md) Pillar 4.
 

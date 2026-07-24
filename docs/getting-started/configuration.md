@@ -2,15 +2,18 @@
 
 This page is the canonical environment-variable and connection-configuration reference for the Blockchain Integration Service and Dashboard. It catalogs every value the backend composition root and the database/cache layers consume, shows how the PostgreSQL connection string (DSN) is constructed, documents Redis and the single frontend build-time variable, and closes the missing `.env.example` gap with an illustrative example block. Prerequisites and install tracks are covered in [installation.md](./installation.md); the day-to-day developer workflow and build caveats are covered in [local-development.md](./local-development.md).
 
-> **Important — the backend configuration surface is a Designed contract.** The composition root loads its settings through a `backend/internal/config` package, and the database and cache layers read a `config.GetConfig()` struct from that same package. `Source: backend/cmd/server/main.go:L6,L22`, `Source: backend/internal/db/postgres.go:L7`, `Source: backend/internal/db/redis.go:L6`. That package **is imported but does not exist in the repository**, so every backend setting documented below is the intended contract **inferred from its consuming code** rather than working configuration wiring. The database DSN construction (`internal/db/postgres.go`) and the Redis client (`internal/db/redis.go`) are themselves **Implemented**, but they depend on the absent config package for their values.
+> **Important — the backend configuration surface is a Designed contract.** The composition root loads its settings through a `backend/internal/config` package, and the database and cache layers read a `config.GetConfig()` struct from that same package. `Source: backend/cmd/server/main.go:L6,L22`, `Source: backend/internal/db/postgres.go:L7`, `Source: backend/internal/db/redis.go:L6`. That package **is imported but does not exist in the repository**, so every backend setting documented below is the intended contract **inferred from its consuming code** rather than working configuration wiring. The database DSN construction (`internal/db/postgres.go`) and the Redis client (`internal/db/redis.go`) are themselves **Source-present (non-buildable)** — the initializer code is written out, but because the imported `internal/config` package is absent and there is no `go.mod`, the backend does not compile and none of this initialization can be observed to run.
 
 ## Maturity Legend
 
 Every capability on this page is tagged with the project-wide maturity discipline used across the documentation set:
 
-- **Implemented** — present and working in the code today.
-- **Provisioned** — infrastructure or container configuration exists, but the capability is not yet fully wired to run.
+- **Implemented** — present in the repository AND compiles AND runs today; reserved, and nothing here qualifies at this checkpoint (the backend has no `go.mod` and imports absent packages).
+- **Source-present (non-buildable)** — code exists but does not compile today, so no runtime behavior may be asserted.
+- **Provisioned** — configuration or container definition exists and would validly apply, but is not yet wired to run.
 - **Designed** — specified or inferred from consuming code, but absent from the code today.
+
+This vocabulary is identical to the reconciliation page's [Maturity Legend](../architecture/scaffold-vs-design.md#maturity-legend).
 
 ## Backend Environment Variables
 
@@ -21,9 +24,9 @@ The composition root loads configuration once at startup via `config.LoadConfig(
 | `LogLevel` | Log verbosity passed to the logger initializer at startup | `logger.Init(cfg.LogLevel)` — backend/cmd/server/main.go:L28 | Designed |
 | `ServerAddress` | Bind address/port the HTTP router listens on | `router.Run(cfg.ServerAddress)` — backend/cmd/server/main.go:L59-L60 | Designed |
 | `DatabaseURL` | Single database connection URL loaded by the composition root | `db.InitDB(cfg.DatabaseURL)` — backend/cmd/server/main.go:L31 | Designed |
-| `DBHost`, `DBPort`, `DBUser`, `DBPassword`, `DBName` | Discrete fields used to build the PostgreSQL DSN | `connStr` in `InitDB` — backend/internal/db/postgres.go:L15 | Implemented (DSN build); values Designed |
-| `DBMaxOpenConns`, `DBMaxIdleConns`, `DBConnMaxLifetime` | Connection-pool tuning applied after connect | backend/internal/db/postgres.go:L23-L25 | Implemented (applied); values Designed |
-| `Redis.Address`, `Redis.Password`, `Redis.DB` | Redis endpoint, auth password, and logical DB index | `redis.NewClient(&redis.Options{...})` — backend/internal/db/redis.go:L14-L18 | Implemented (client); values Designed |
+| `DBHost`, `DBPort`, `DBUser`, `DBPassword`, `DBName` | Discrete fields used to build the PostgreSQL DSN | `connStr` in `InitDB` — backend/internal/db/postgres.go:L15 | Source-present (non-buildable) DSN build; values Designed |
+| `DBMaxOpenConns`, `DBMaxIdleConns`, `DBConnMaxLifetime` | Connection-pool tuning coded to be applied after connect | backend/internal/db/postgres.go:L23-L25 | Source-present (non-buildable); values Designed |
+| `Redis.Address`, `Redis.Password`, `Redis.DB` | Redis endpoint, auth password, and logical DB index | `redis.NewClient(&redis.Options{...})` — backend/internal/db/redis.go:L14-L18 | Source-present (non-buildable) client; values Designed |
 | `BlockchainConfigs` | XRP Ledger / Ethereum client configuration | `blockchain.InitBlockchainClients(cfg.BlockchainConfigs)` — backend/cmd/server/main.go:L38 | Designed (package absent) |
 | `CustodianConfig` | Utxo Custodian client configuration | `custodian.InitCustodianClient(cfg.CustodianConfig)` — backend/cmd/server/main.go:L44 | Designed (package absent) |
 
@@ -39,7 +42,7 @@ The PostgreSQL DSN is assembled from the discrete `DB*` fields and appends a fix
 host=<DBHost> port=<DBPort> user=<DBUser> password=<DBPassword> dbname=<DBName> sslmode=disable
 ```
 
-The connection is opened with `sqlx.Connect("postgres", connStr)` using the `lib/pq` driver, then verified with a ping. `Source: backend/internal/db/postgres.go:L4-L6,L18`. The following fields drive the DSN and connection pool.
+The initializer is coded to open the connection with `sqlx.Connect("postgres", connStr)` using the `lib/pq` driver and then to verify it with a ping. `Source: backend/internal/db/postgres.go:L4-L6,L18`. Because the package does not compile today (absent `internal/config`, no `go.mod`), this connect-and-ping sequence is source-present (non-buildable) and cannot be observed to run. The following fields drive the DSN and connection pool.
 
 | Field | Purpose | Source |
 |-------|---------|--------|
@@ -93,7 +96,7 @@ JWT_EXPIRY=15m
 
 The `BlockchainConfigs` and `CustodianConfig` values (see the backend table above) are structured rather than flat scalars and are **Designed**; they are not expressed in the flat block above.
 
-The single frontend variable is `REACT_APP_API_BASE_URL`, which points the Axios client at the backend, falling back to `https://api.example.com` when unset. `Source: frontend/src/services/api.ts:L4`. It is a Create React App **build-time** variable — the `REACT_APP_` prefix is required for CRA to expose it to the bundle — and it typically lives in `frontend/.env`.
+The single frontend variable is `REACT_APP_API_BASE_URL`, which points the Axios client at the backend, falling back to `https://api.example.com` when unset. `Source: frontend/src/services/api.ts:L4`. It is a Create React App **build-time** variable — Create React App only inlines custom environment variables whose names begin with the `REACT_APP_` prefix into the built bundle, and it does so at build time rather than at runtime (`Source: Create React App docs, "Adding Custom Environment Variables" — create-react-app.dev/docs/adding-custom-environment-variables`) — and it typically lives in `frontend/.env`. (Create React App is deprecated as of 2025-02-14; see [local-development.md](./local-development.md) for the primary-source note and migration status.)
 
 ```env
 REACT_APP_API_BASE_URL=http://localhost:8080

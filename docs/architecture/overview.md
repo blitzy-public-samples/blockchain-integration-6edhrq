@@ -6,7 +6,8 @@ The Blockchain Integration Service and Dashboard is a custodial blockchain platf
 
 Every capability named on this page is tagged with the project-wide maturity discipline, consistent with the labeling used across the documentation set and in [`data-model.md`](data-model.md):
 
-- **Implemented** — present and functional in the code as-declared today.
+- **Implemented** — present in code, building, and functional today. Reserved for genuinely working capability; at this checkpoint **nothing qualifies for it**, because the backend has no Go module and every package carries a compile-blocking defect (and the frontend does not build).
+- **Implemented-with-defects (source-present, non-buildable)** — the code is present and substantially written, but a compile-blocking defect prevents its module from building, so no runtime behavior can be claimed. This is the operational-truth label that applies to every source-present capability shown as solid in **Fig A1**, consistent with [`scaffold-vs-design.md`](scaffold-vs-design.md).
 - **Provisioned** — scaffolding or configuration exists, but the capability is not yet fully wired to run.
 - **Designed** — specified in the design corpus (`documentation/*.md`), not yet present in code.
 
@@ -14,19 +15,19 @@ The consolidated Implemented / Provisioned / Designed matrix that reconciles the
 
 ## Fig A1 — Current Implemented Scaffold (Backend)
 
-**Fig A1 — Current Implemented Scaffold** shows the backend exactly as it is wired today: the request-handling path is real and working, but the composition root imports several packages that do not exist and calls into the router and background tasks with mismatched signatures. The figure deliberately renders these gaps rather than hiding them, so that the difference between what runs and what is merely referenced is legible at a glance.
+**Fig A1 — Current Implemented Scaffold** shows the backend exactly as it is wired today: the request-handling path is present in source but does **not** build — the composition root imports several packages that do not exist and calls into the router and background tasks with mismatched signatures, and there is no `go.mod` anywhere, so nothing runs. The figure deliberately renders these gaps rather than hiding them, so that the difference between what is present in source and what is merely referenced is legible at a glance. Every solid box in the figure is **Implemented-with-defects (source-present, non-buildable)**, not functional.
 
 **Figure A1 — Current Implemented Scaffold (Backend, as-wired today)**
 
 ```mermaid
 flowchart TD
     subgraph Legend_A1["Legend"]
-        L1["Solid box = implemented package"]
+        L1["Solid box = source-present package (does NOT compile today)"]
         L2["Dashed box = imported but ABSENT / broken wiring"]
     end
-    Client["HTTP Client / Frontend"] --> Router["internal/api routes + handlers (implemented)"]
-    Router --> Core["internal/core: vault, transaction, signature (implemented)"]
-    Core --> DB["internal/db: postgres.go, redis.go, schema.go (implemented)"]
+    Client["HTTP Client / Frontend"] --> Router["internal/api routes + handlers (source-present, non-buildable)"]
+    Router --> Core["internal/core: vault, transaction, signature (source-present, non-buildable)"]
+    Core --> DB["internal/db: postgres.go, redis.go, schema.go (source-present, non-buildable)"]
     Main["cmd/server/main.go (composition root)"] -.->|"SetupRouter 4 args vs 0 args"| Router
     Main -.-> Cfg["internal/config (ABSENT)"]
     Main -.-> Log["pkg/logger (ABSENT)"]
@@ -36,7 +37,7 @@ flowchart TD
     %% Legend explains solid vs dashed; dashed denotes wiring gaps
 ```
 
-As the `Legend_A1` subgraph in **Fig A1** states, solid boxes and arrows denote packages that are **Implemented** and functional today: the router and handlers under `internal/api` serve 18 REST routes across the auth, vault, transaction, and signature resources (**Implemented**); the three core services under `internal/core` are constructed and injected as dependencies (**Implemented**); and the `internal/db` layer (`postgres.go`, `redis.go`, `schema.go`) provides persistence and the five GORM entities (**Implemented**). `Source: backend/internal/api/routes.go:L9-L54`, `Source: backend/internal/core/vault/service.go:L15`, `Source: backend/internal/db/schema.go:L11-L68`.
+As the `Legend_A1` subgraph in **Fig A1** states, solid boxes and arrows denote packages that are **present in source but do not compile today** — every one is **Implemented-with-defects (source-present, non-buildable)**, not functional: the router and handlers under `internal/api` *declare* 18 REST routes across the auth, vault, transaction, and signature resources, but the `api` package does not build (handler struct types are referenced as package values and several referenced handler methods do not exist); the three core services under `internal/core` *define* their constructors and methods, but each imports the absent `internal/blockchain`/`internal/custodian`/`pkg/utils` and references the undefined `db.Repository`, so none compiles; and the `internal/db` layer (`postgres.go`, `redis.go`, `schema.go`) *declares* persistence and the five GORM entities, but imports the absent `internal/config` and declares the undefined type `gorm.JSONMap`, so it does not build either. No request is actually served today. `Source: backend/internal/api/routes.go:L9-L54`, `Source: backend/internal/core/vault/service.go:L6-L15`, `Source: backend/internal/db/schema.go:L11-L68`, `Source: backend/internal/db/postgres.go:L7`.
 
 The dashed elements are the wiring gaps that make the scaffold non-runnable as composed, and four of them are visible at the architecture level (**Designed** targets that are absent or broken in code today):
 
@@ -77,7 +78,7 @@ As the `Legend_A2` subgraph in **Fig A2** clarifies, every box is a target-state
 
 ## From Scaffold to Target
 
-As shown in **Figure A1** and **Figure A2**, the transition from the current implemented scaffold to the designed target is additive and corrective rather than a rewrite of the request-handling core. The router, core services, and database layer that are **Implemented** in **Fig A1** carry forward unchanged into **Fig A2**; the target simply supplies what is missing and repairs what is mis-wired:
+As shown in **Figure A1** and **Figure A2**, the transition from the current scaffold to the designed target is additive and corrective rather than a rewrite of the request-handling core. The router, core services, and database layer that are source-present (**Implemented-with-defects (source-present, non-buildable)**) in **Fig A1** carry forward into **Fig A2** once their compile-blocking defects are resolved; the target supplies what is missing and repairs what is mis-wired so that the same source can build and run:
 
 - Add centralized configuration through `internal/config` (Viper) (**Designed**). `Source: backend/cmd/server/main.go:L6-L12`.
 - Add structured logging through `pkg/logger` (Logrus) with correlation IDs propagated across requests (**Designed**). `Source: backend/cmd/server/main.go:L6-L12`.
