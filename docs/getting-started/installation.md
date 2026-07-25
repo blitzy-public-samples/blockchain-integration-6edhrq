@@ -7,7 +7,7 @@ This page lists the prerequisites and walks through the two install tracks — t
 The system is a custodial blockchain integration platform composed of two deployable units:
 
 - **Backend** — a Go service built on the Gin web framework (Source: backend/cmd/server/main.go:L4), persisting to **PostgreSQL** through the `lib/pq` driver (Source: backend/internal/db/postgres.go:L5,L18) and to **Redis** through `go-redis/v8` (Source: backend/internal/db/redis.go:L5).
-- **Frontend** — a **React 18.2.0** single-page dashboard written in TypeScript and built with Create React App (`react-scripts` 5.0.1) (Source: frontend/package.json:L9-L13). Create React App was deprecated by the React team on 2025-02-14 and is in maintenance mode; the frontend track below still works against the pinned `react-scripts` 5.0.1, but see the [Frontend (React / CRA) Installation](#frontend-react--cra-installation) note and [local-development.md](./local-development.md) for the primary-source deprecation detail.
+- **Frontend** — a **React 18.2.0** single-page dashboard written in TypeScript and built with Create React App (`react-scripts` 5.0.1) (Source: frontend/package.json:L9-L13). Create React App was deprecated by the React team on 2025-02-14 and is in maintenance mode; more importantly, the frontend does **not** build or serve against the repository as-is (undeclared dependencies, absent store slices/hooks/utilities/types, and export/import mismatches) — see the [Frontend (React / CRA) Installation](#frontend-react--cra-installation) compile-blocker set and [local-development.md](./local-development.md) for the full detail.
 
 This documentation describes the repository as it exists on disk. A capability is labeled **Implemented** only when it is present AND compiles AND runs today — a bar nothing in this repository meets at this checkpoint, because the backend has no `go.mod` and the frontend does not build cleanly. Code that is written out but does not compile is **Source-present (non-buildable)**; container or infrastructure definitions that exist and would validly apply are **Provisioned**; capabilities that are referenced or intended but absent from the tree are **Designed**.
 
@@ -49,19 +49,26 @@ go run ./cmd/server
 
 ## Frontend (React / CRA) Installation
 
-Install dependencies and start the Create React App dev server from the `frontend/` directory (Source: frontend/package.json:L20-L27).
+The `frontend/` directory contains a Create React App project (Source: frontend/package.json:L20-L27), but **it does not build or serve against the repository as-is.** Read the compile-blocker set below *before* running any command — the commands are shown for completeness and for use only after these blockers are resolved; none of them will produce a running dashboard today.
 
-> **Create React App is deprecated (maintenance mode).** The React team deprecated Create React App for new applications on 2025-02-14; it has no active maintainers and the team recommends migrating to a framework or to a build tool such as Vite, Parcel, or RSBuild. `Source: React Blog, "Sunsetting Create React App" — react.dev/blog/2025/02/14/sunsetting-create-react-app`. The steps below still function against this repository's pinned `react-scripts` 5.0.1 (`Source: frontend/package.json:L13`), but any migration off CRA is **Designed** — no alternative build tool is present in the tree today.
+> **Frontend compile blockers (complete set — the app will NOT build until all are resolved).** The following are the reasons `npm install && npm start` (or `npm run build`) cannot produce a working build; each is **Designed**/absent or a **Source-present (non-buildable)** defect:
+> - **Undeclared dependencies.** The source imports Redux Toolkit, `react-redux`, Zod, Axios, and Chart.js, but none are declared in `package.json`, so a clean install does not obtain them. `Source: frontend/src/store/index.ts:L1`, `Source: frontend/src/schema/transaction.ts:L1`, `Source: frontend/src/services/api.ts:L1`, `Source: frontend/package.json`
+> - **Absent store slices / typed hooks.** Pages import Redux slices and typed hooks that the store does not export (for example the Analytics page references a slice not registered in the store, which registers only `vault`, `transaction`, and `user`). `Source: frontend/src/store/index.ts:L8-L12`
+> - **Absent utilities and types, and export/import mismatches.** Modules import utilities, types, and named exports that are not defined in the tree, so type-checking and bundling fail.
+> - **No committed lockfile.** `package-lock.json` is absent, so CI's `npm ci` cannot run (Source: .github/workflows/frontend-ci.yml:L18); a local `npm install` generates a lockfile but does **not** supply the undeclared dependencies or the absent modules above, so `npm install` alone cannot make the app build.
+> - **CRA/`tsconfig` toolchain mismatch.** Documented in [local-development.md](./local-development.md).
+
+> **Create React App is deprecated (maintenance mode).** The React team deprecated Create React App for new applications on 2025-02-14; it has no active maintainers and the team recommends migrating to a framework or to a build tool such as Vite, Parcel, or RSBuild. `Source: React Blog, "Sunsetting Create React App" — react.dev/blog/2025/02/14/sunsetting-create-react-app`. This repository pins `react-scripts` 5.0.1 (`Source: frontend/package.json:L13`); any migration off CRA is **Designed** — no alternative build tool is present in the tree today.
 
 ```bash
 cd frontend
-npm install
-npm start
+npm install   # generates a lockfile but does NOT resolve the undeclared deps / absent modules above
+npm start     # will NOT serve a dashboard until every compile blocker above is resolved
 ```
 
-The dev server serves the dashboard at `http://localhost:3000` (the Create React App default for `react-scripts start`) (Source: frontend/package.json:L21). A production bundle and the test runner are available through `npm run build` and `npm test` (Source: frontend/package.json:L22-L23).
+On a working build, `react-scripts start` would serve the dashboard at `http://localhost:3000` and `npm run build`/`npm test` would produce a bundle and run tests (Source: frontend/package.json:L21-L23) — but because the compile blockers above are unresolved, **none of these behaviors is available today**; no frontend runtime behavior is claimed here as Implemented.
 
-**Maturity: Source-present (non-buildable) as-is.** The frontend has no committed lockfile (`package-lock.json` is absent), so the CI's `npm ci` step cannot resolve a lockfile and fails (Source: .github/workflows/frontend-ci.yml:L18); locally, `npm install` resolves and generates one. Combined with the CRA/`tsconfig` toolchain mismatch documented in [local-development.md](./local-development.md), the app does not build cleanly against the repository as-is, so no runtime behavior is claimed here as Implemented. **Supply-chain note:** without a committed `package-lock.json`, installs are not reproducible and `npm ci`/`npm audit` cannot verify integrity against a locked baseline — install in an isolated environment and commit the generated lockfile (and run `npm audit`) before trusting the resolved dependency set. The `npm ci` and lockfile discussion is covered in [local-development.md](./local-development.md).
+**Maturity: Source-present (non-buildable) as-is.** **Supply-chain note:** without a committed `package-lock.json`, installs are not reproducible and `npm ci`/`npm audit` cannot verify integrity against a locked baseline — install in an isolated environment and commit the generated lockfile (and run `npm audit`) before trusting the resolved dependency set. The `npm ci` and lockfile discussion is covered in [local-development.md](./local-development.md).
 
 ## Corrected Setup (Replacing scripts/setup.sh)
 
@@ -75,19 +82,22 @@ The repository ships a bootstrap script, `scripts/setup.sh`, but it is **Designe
 
 Initialize a local PostgreSQL database and role instead of the MySQL example. The backend connects with `sslmode=disable`, so a locally reachable instance is sufficient (Source: backend/internal/db/postgres.go:L15).
 
-Create the role **without** a password on the command line, then set the password through psql's interactive `\password` prompt. Passing a literal password in the command text (for example `... PASSWORD 'change-me'`) would leak the secret into your shell history and into process listings (`ps`), so it is deliberately avoided here; `\password` reads the secret without echoing it and never places it in `argv` or history.
+Create the application **role first**, then create the database **owned by** that role, and only then set the role's password through psql's interactive `\password` prompt. Creating the role before the database lets you make the role the database owner in a single step (`createdb -O`), so the application role has full rights on its own database from the outset; creating the database first (as a naive example might) would leave it owned by your admin/superuser role with no privileges granted to the application role. Passing a literal password in the command text (for example `... PASSWORD 'change-me'`) would leak the secret into your shell history and into process listings (`ps`), so it is deliberately avoided here; `\password` reads the secret without echoing it and never places it in `argv` or history.
 
 ```bash
-createdb blockchain_integration
-psql -d blockchain_integration -c "CREATE ROLE app WITH LOGIN;"
-psql -d blockchain_integration     # then, at the interactive prompt:  \password app   (enter secret; not echoed)  →  \q
+psql -d postgres -c "CREATE ROLE app WITH LOGIN;"                 # 1) role first (connect to the default maintenance DB)
+createdb -O app blockchain_integration                            # 2) database OWNED BY the app role
+psql -d blockchain_integration -c "GRANT ALL PRIVILEGES ON DATABASE blockchain_integration TO app;"   # 3) explicit grant
+psql -d blockchain_integration     # 4) then, at the interactive prompt:  \password app   (enter secret; not echoed)  →  \q
 ```
 
-Choose a strong, unique password when prompted; the role name `app` is illustrative and must match the `DBUser` value in your [configuration.md](./configuration.md) settings.
+Choose a strong, unique password when prompted; the role name `app` is illustrative and must match the `DBUser` value in your [configuration.md](./configuration.md) settings. On a fresh instance you may need to run these commands as the `postgres` superuser (for example prefixed with `sudo -u postgres`).
 
 ## Optional: Container-Based Setup
 
-Dockerfiles exist for both services and provide the only concrete port bindings (**Provisioned**). The backend image is based on `golang:1.17-alpine` and exposes port 8080 (Source: infrastructure/docker/Dockerfile.backend:L2,L20); the frontend image is a `node:14` multi-stage build served by `nginx:alpine`, exposing port 80 (Source: infrastructure/docker/Dockerfile.frontend:L2,L20,L26).
+Dockerfiles exist for both services and are the only place an intended port is declared (**Provisioned**). The backend image is based on `golang:1.17-alpine` and declares its intended port with `EXPOSE 8080` (Source: infrastructure/docker/Dockerfile.backend:L2,L20); the frontend image is a `node:14` multi-stage build served by `nginx:alpine` and declares `EXPOSE 80` (Source: infrastructure/docker/Dockerfile.frontend:L2,L20,L26).
+
+> **What `EXPOSE` does (and does not) do.** Docker `EXPOSE` is documentation metadata: it records the port a container *intends* to listen on for tooling and inter-container discovery, and it is the set of ports published when you run with `docker run -P` (publish-all). It does **not** by itself bind a host port, publish the port, or start a listener — publishing requires an explicit `-p host:container` (or `-P`) at run time, and traffic is only served if a process inside the container is actually listening on that port. Because these images do not build as-is (see the Maturity note below), no listener runs today regardless of the `EXPOSE` declarations.
 
 **Maturity: Designed.** Both Dockerfiles `COPY` files that are absent from the repository — `go.mod`/`go.sum` (Source: infrastructure/docker/Dockerfile.backend:L8) and `package-lock.json` (Source: infrastructure/docker/Dockerfile.frontend:L8) — so an out-of-the-box `docker build` does not succeed. For full deployment topology and container detail, see [deployment.md](../guides/deployment.md).
 

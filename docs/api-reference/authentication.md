@@ -29,7 +29,7 @@ The consolidated maturity reconciliation between the design corpus and the on-di
 
 **Maturity:** Source-present (non-buildable). **Auth:** Public — no middleware is attached to this route. `Source: backend/internal/api/routes.go:L19`.
 
-**Description.** The handler is written to authenticate a user with a username and password and return a signed JWT. It binds the JSON body into a struct whose `Username` and `Password` fields are both `binding:"required"`, delegates verification to `authService.Login(username, password)`, and returns the resulting token, which is intended to be the bearer credential clients attach to all secured endpoints. This does not run today: `authService` is of type `*auth.AuthService` from the absent `internal/core/auth` package, so the handler does not compile. `Source: backend/internal/api/handlers/auth.go:L5,L21-L39`, `Source: frontend/src/services/api.ts:L11-L16`.
+**Description.** The handler is written to authenticate a user with a username and password and return a signed JWT. It binds the JSON body into a struct whose `Username` and `Password` fields are both `binding:"required"`, delegates verification to `authService.Login(username, password)`, and returns the resulting token, which is intended to be the bearer credential clients attach to all secured endpoints. This does not run today: `authService` is of type `*auth.AuthService` from the absent `internal/core/auth` package, so the handler does not compile. Because the token is minted entirely inside that absent auth service, **JWT issuance is Designed** — no token is signed or returned at runtime today, and the intended contract to keep the issued token out of logs is likewise Designed, not an evidenced guarantee. `Source: backend/internal/api/handlers/auth.go:L5,L21-L39`, `Source: frontend/src/services/api.ts:L11-L16`.
 
 ### Request
 
@@ -38,7 +38,7 @@ Headers: `Content-Type: application/json`.
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `username` | `string` | Yes | Bound with `binding:"required"`; a missing or empty value yields `400`. `Source: backend/internal/api/handlers/auth.go:L23`. |
-| `password` | `string` | Yes | Bound with `binding:"required"`; never logged or returned. `Source: backend/internal/api/handlers/auth.go:L24`. |
+| `password` | `string` | Yes | Bound with `binding:"required"`; a missing or empty value yields `400`. Handling this credential so that it is **never logged or returned** is a **Designed** security contract, not a runtime guarantee evidenced today — the `internal/core/auth` service that would verify it and any log-redaction path are absent, so no code has been observed to enforce it. `Source: backend/internal/api/handlers/auth.go:L24`. |
 
 ### Responses
 
@@ -53,12 +53,15 @@ Headers: `Content-Type: application/json`.
 Request:
 
 ```bash
-curl -X POST http://localhost:8080/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"alice","password":"S3cret-Passphrase!"}'
+read -rs -p 'Password: ' PASSWORD && echo
+printf '{"username":"alice","password":"%s"}' "$PASSWORD" \
+  | curl -X POST http://localhost:8080/auth/login \
+      -H 'Content-Type: application/json' \
+      --data-binary @-
+unset PASSWORD
 ```
 
-> **Note.** The base URL `http://localhost:8080` is **illustrative** — no server bind address is configured in code (the frontend Axios client defaults to `https://api.example.com`, not localhost); see the [overview](overview.md#authentication-model). The example password `S3cret-Passphrase!` is a synthetic placeholder chosen to satisfy the **Designed** password policy (≥12 chars with uppercase, lowercase, number, and special character); note that **no password-complexity validation runs in code today** — the policy is Designed only. `Source: documentation/Software Requirements Specifications (SRS).md:L432`, `Source: frontend/src/services/api.ts:L4`.
+> **Note.** The base URL `http://localhost:8080` is **illustrative** — no server bind address is configured in code (the frontend Axios client defaults to `https://api.example.com`, not localhost); see the [overview](overview.md#authentication-model). The password is **read via a silent prompt (`read -rs`) and streamed to `curl` over stdin (`--data-binary @-`)** rather than passed with `-d '…'` on the command line, so the credential never lands in the process argument list (visible via `ps`) or in shell history; `printf` is a shell builtin in bash/zsh, so the expanded value is not handed to a separate process either, and `unset` clears it afterward. For a password containing JSON-special characters (`"` or `\`), build the body with a tool that escapes it and reads from the environment — for example `PASSWORD="$PASSWORD" jq -nc '{username:"alice",password:env.PASSWORD}' | curl … --data-binary @-` — which also keeps the secret out of argv. Choose a value satisfying the **Designed** password policy (≥12 chars with uppercase, lowercase, number, and special character); note that **no password-complexity validation runs in code today** — the policy is Designed only. `Source: documentation/Software Requirements Specifications (SRS).md:L432`, `Source: frontend/src/services/api.ts:L4`.
 
 Response (`200 OK`):
 
@@ -82,7 +85,7 @@ Headers: `Content-Type: application/json`.
 |-------|------|----------|-------|
 | `username` | `string` | Yes | Login username for the new user. `Source: backend/internal/db/schema.go:L24`. |
 | `email` | `string` | Yes | Contact email for the new user. `Source: backend/internal/db/schema.go:L25`. |
-| `password` | `string` | Yes | Plaintext credential supplied at registration; stored only as a `PasswordHash` and never returned. `Source: backend/internal/db/schema.go:L26`. |
+| `password` | `string` | Yes | Plaintext credential supplied at registration. The intended contract — hash it, persist **only** the resulting `PasswordHash`, and **never** return or log the plaintext — is **Designed**, not an evidenced guarantee: the `Register` handler and the hashing code are absent, so no code hashes this value or excludes it from responses today. `Source: backend/internal/db/schema.go:L26`. |
 | `organizationId` | `string` (uuid) | Yes | The organization the user is created under. `Source: backend/internal/db/schema.go:L23`. |
 
 ### Responses (inferred)
@@ -97,10 +100,15 @@ Headers: `Content-Type: application/json`.
 Request:
 
 ```bash
-curl -X POST http://localhost:8080/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"alice","email":"alice@example.com","password":"S3cret-Passphrase!","organizationId":"3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11"}'
+read -rs -p 'Password: ' PASSWORD && echo
+printf '{"username":"alice","email":"alice@example.com","password":"%s","organizationId":"3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11"}' "$PASSWORD" \
+  | curl -X POST http://localhost:8080/auth/register \
+      -H 'Content-Type: application/json' \
+      --data-binary @-
+unset PASSWORD
 ```
+
+> **Note.** As with login, the password is read via a silent prompt and streamed over stdin so it never appears in argv or shell history (see the login example's note for the JSON-special-character variant). This request is **Designed** — no `Register` handler exists to accept it today. `Source: backend/internal/api/handlers/auth.go` (no `Register` method).
 
 Response (`201 Created`, Designed):
 

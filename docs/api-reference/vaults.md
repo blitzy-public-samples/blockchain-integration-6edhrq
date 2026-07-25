@@ -74,9 +74,11 @@ curl -X POST http://localhost:8080/vault/create -H "Authorization: Bearer <token
 
 ```json
 { "id": "1b4e28ba-2fa1-11d2-883f-0016d3cca427", "organizationId": "3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11",
-  "name": "Treasury Vault", "blockchainType": "XRP", "address": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+  "name": "Treasury Vault", "blockchainType": "XRP", "address": "<xrp-vault-address>",
   "metadata": {}, "createdAt": "2024-01-15T09:30:00Z", "updatedAt": "2024-01-15T09:30:00Z" }
 ```
+
+> **Address examples — test values only, never send funds (applies to every example on this page).** Every on-chain `address` shown is an unmistakable placeholder (`<xrp-vault-address>`) that is **not** a valid, sendable account. Do not copy it into a live request; when exercising the API against a running environment, substitute an account you control on a **test network only** (for example the XRPL Testnet) and never transmit real funds or mainnet transactions to any value taken from this document.
 
 > **Serialization caveat (applies to every `Vault` response example on this page).** The lower-camelCase keys above (`id`, `organizationId`, `blockchainType`, `createdAt`, …) are the **Designed** response DTO. The `Vault` struct carries **no `json` tags** and embeds `gorm.Model`, and the `CreateVault` handler marshals it directly (`c.JSON(201, createdVault)`); were it to compile and marshal as-declared, the actual keys would be **PascalCase** (`ID`, `OrganizationID`, `Name`, `BlockchainType`, `Address`, `Metadata`, `CreatedAt`, `UpdatedAt`) plus a promoted `DeletedAt`. See [Response Serialization](overview.md#response-serialization--designed-camelcase-contract-vs-actual-pascalcase-output). `Source: backend/internal/db/schema.go:L32-L42`, `Source: backend/internal/api/handlers/vault.go:L56`.
 
@@ -108,7 +110,7 @@ curl http://localhost:8080/vault/list -H "Authorization: Bearer <token>"
 
 ```json
 [ { "id": "1b4e28ba-2fa1-11d2-883f-0016d3cca427", "organizationId": "3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11",
-    "name": "Treasury Vault", "blockchainType": "XRP", "address": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    "name": "Treasury Vault", "blockchainType": "XRP", "address": "<xrp-vault-address>",
     "metadata": {}, "createdAt": "2024-01-15T09:30:00Z", "updatedAt": "2024-01-15T09:30:00Z" } ]
 ```
 
@@ -146,7 +148,7 @@ curl http://localhost:8080/vault/1b4e28ba-2fa1-11d2-883f-0016d3cca427 \
 
 ```json
 { "id": "1b4e28ba-2fa1-11d2-883f-0016d3cca427", "organizationId": "3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11",
-  "name": "Treasury Vault", "blockchainType": "XRP", "address": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+  "name": "Treasury Vault", "blockchainType": "XRP", "address": "<xrp-vault-address>",
   "metadata": {}, "createdAt": "2024-01-15T09:30:00Z", "updatedAt": "2024-01-15T09:30:00Z" }
 ```
 
@@ -168,7 +170,7 @@ curl http://localhost:8080/vault/1b4e28ba-2fa1-11d2-883f-0016d3cca427 \
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `name` | string | No | New display name. |
-| `metadata` | object | No | Free-form JSON metadata (`gorm.JSONMap`). `Source: backend/internal/db/schema.go:L39`. |
+| `metadata` | object | No | Free-form JSON metadata, *intended* to persist as JSONB via `gorm.JSONMap` (**Designed**, not functional: `gorm.JSONMap` is undefined in `gorm.io/gorm`, so no JSONB column is created — see [`../architecture/data-model.md#notable-field-types`](../architecture/data-model.md#notable-field-types)). `Source: backend/internal/db/schema.go:L39`. |
 
 **Responses.**
 
@@ -189,7 +191,7 @@ curl -X PUT http://localhost:8080/vault/1b4e28ba-2fa1-11d2-883f-0016d3cca427 \
 
 ```json
 { "id": "1b4e28ba-2fa1-11d2-883f-0016d3cca427", "organizationId": "3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11",
-  "name": "Treasury Vault (renamed)", "blockchainType": "XRP", "address": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+  "name": "Treasury Vault (renamed)", "blockchainType": "XRP", "address": "<xrp-vault-address>",
   "metadata": { "tier": "cold" }, "createdAt": "2024-01-15T09:30:00Z", "updatedAt": "2024-01-16T11:00:00Z" }
 ```
 
@@ -236,7 +238,7 @@ The vault resource is the `Vault` GORM model. Its fields are not re-defined exha
 Key points for API consumers:
 
 - `blockchainType` is a plain `string` in code; the enumerated chains `XRP` / `Ethereum` are **Designed** (not enforced by the schema). `Source: backend/internal/db/schema.go:L37`, `Source: documentation/Technical Specifications.md:§API DESIGN`.
-- `metadata` is a free-form JSON object persisted as JSONB via `gorm.JSONMap`. `Source: backend/internal/db/schema.go:L39`.
+- `metadata` is a free-form JSON object *intended* to persist as JSONB via `gorm.JSONMap` — **Designed**, not functional: `gorm.JSONMap` is undefined in `gorm.io/gorm`, so `schema.go` does not compile as-declared and no JSONB column is created (see [`../architecture/data-model.md#notable-field-types`](../architecture/data-model.md#notable-field-types)). `Source: backend/internal/db/schema.go:L39`.
 - `address` is the on-chain address held by the custodial vault; it is populated by the (Designed) blockchain adapter at create time rather than supplied by the client. `Source: backend/internal/core/vault/service.go:L25`, `Source: backend/internal/db/schema.go:L38`.
 - A vault owns transactions: each `Transaction` references its source vault via `VaultID`. `Source: backend/internal/db/schema.go:L48`.
 

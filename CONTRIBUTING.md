@@ -17,19 +17,25 @@ tier are welcome.
 
 ## Code of Conduct
 
-We want this project to be a welcoming, respectful, and harassment-free space for
-everyone. By participating you agree to engage constructively, assume good intent,
-give and accept feedback graciously, and keep discussion focused on the technical
-merits of a change. Report unacceptable behavior to the project maintainers.
+The repository does **not** ship a formal, adopted Code of Conduct: there is no
+`CODE_OF_CONDUCT.md` policy file in the tree, so no reporting or enforcement
+process is defined here. The following is a **non-binding** suggestion, not an
+adopted policy: please engage constructively, assume good intent, give and accept
+feedback graciously, and keep discussion focused on the technical merits of a
+change. A binding Code of Conduct would need to be adopted and committed as a
+separate governance artifact.
 
 ## Getting the Code and Branching
 
-Development targets the `main` branch. Both CI workflows run automatically on every
-push and pull request that targets `main`, so the intended model is to fork or
-create a topic branch from `main`, commit your work there, and open a pull request
-back against `main` so CI can validate it.
+The repository declares **no mandatory branching model**; no branch-protection or
+contribution policy file exists in the tree. The only branch-related evidence is
+that both CI workflows are configured to trigger on pushes and pull requests
+targeting the `main` branch.
 `Source: .github/workflows/backend-ci.yml:L3-L7`,
-`Source: .github/workflows/frontend-ci.yml:L3-L7`.
+`Source: .github/workflows/frontend-ci.yml:L3-L7`. Given that, a reasonable
+**suggested** (non-binding) workflow is to create a topic branch from `main`,
+commit your work there, and open a pull request back against `main` so CI runs —
+but nothing in the repository requires this model.
 
 ## Development Environment
 
@@ -88,41 +94,36 @@ The full test strategy, framework inventory, and coverage targets are documented
 
 ## Continuous Integration
 
-Two GitHub Actions workflows implement CI, one per application tier. Both trigger on
-every push and pull request to `main`.
-`Source: .github/workflows/backend-ci.yml:L3-L7`,
-`Source: .github/workflows/frontend-ci.yml:L3-L7`. Each workflow defines three
-independent jobs — `build`, `test`, and `lint`.
+Two GitHub Actions workflows implement CI, one per application tier. Both trigger
+on every push and pull request to `main`, and each defines three independent jobs
+— `build`, `test`, and `lint` — with the backend pinned to Go `1.20` and the
+frontend to Node `14.x`.
+`Source: .github/workflows/backend-ci.yml:L3-L7,L17`,
+`Source: .github/workflows/frontend-ci.yml:L3-L7,L17`.
 
-**Backend CI** — Go `1.20`. `Source: .github/workflows/backend-ci.yml:L17`.
-
-| Job | Command | Source |
-|-----|---------|--------|
-| `build` | `go build -v ./...` | `.github/workflows/backend-ci.yml:L19` |
-| `test` | `go test -v ./...` | `.github/workflows/backend-ci.yml:L30` |
-| `lint` | install `golangci-lint` `v1.50.1`, then `golangci-lint run` | `.github/workflows/backend-ci.yml:L41-L43` |
-
-**Frontend CI** — Node `14.x`. `Source: .github/workflows/frontend-ci.yml:L17`.
-
-| Job | Command | Source |
-|-----|---------|--------|
-| `build` | `npm ci` then `npm run build` | `.github/workflows/frontend-ci.yml:L18-L19` |
-| `test` | `npm ci` then `npm test` | `.github/workflows/frontend-ci.yml:L29-L30` |
-| `lint` | `npm ci` then `npm run lint` | `.github/workflows/frontend-ci.yml:L40-L41` |
+As a concise entry point, this file does not reproduce the per-job command tables;
+the authoritative, job-by-job CI walkthrough — including exact commands, the
+`golangci-lint v1.50.1` pin, and the end-of-life-runtime caveats — lives in
+[`docs/contributing/development.md`](docs/contributing/development.md).
 
 **Maturity: Provisioned** — the workflow files are committed and structurally
 valid, but the pipelines do not pass against the repository as-is (see
 [Project Maturity and Known Limitations](#project-maturity-and-known-limitations)).
-The job-by-job walkthrough is in
-[`docs/contributing/development.md`](docs/contributing/development.md).
 
 ## Submitting Changes
 
-- Open a pull request against the `main` branch so both CI workflows run against it.
+These are **suggestions**, not a repository-enforced policy (see
+[Getting the Code and Branching](#getting-the-code-and-branching)):
+
+- Opening a pull request against the `main` branch causes both CI workflows to run
+  against it, because that is what their triggers are configured to do.
   `Source: .github/workflows/backend-ci.yml:L3-L7`,
   `Source: .github/workflows/frontend-ci.yml:L3-L7`.
-- Ensure the CI jobs for the stack you touched are green: `build`, `test`, and
-  `lint` for the backend and/or the frontend.
+- Ideally the CI jobs for the stack you touched (`build`, `test`, and `lint`)
+  would pass. Note, however, that **neither pipeline can pass against the
+  repository as-is** — the tree is an early-stage scaffold (see
+  [Project Maturity and Known Limitations](#project-maturity-and-known-limitations)) —
+  so a fully-green run is not achievable today and is not treated as a gate here.
 - Keep changes minimal and focused — one logical change per pull request — and
   include a clear description of what changed and why.
 - Update the relevant `docs/` pages when your change alters behavior, configuration,
@@ -134,15 +135,18 @@ In the interest of honesty, note that this repository is an early-stage scaffold
 Neither CI pipeline can pass against it as-is, so local builds may require
 additional setup beyond the commands above:
 
-- **Backend** — there is no committed `go.mod`/`go.sum` in the repository, so
-  `go build -v ./...` and `go test -v ./...` have no module context and cannot
-  resolve imports or compile as-is. **Maturity: Designed** (build module absent).
-  `Source: .github/workflows/backend-ci.yml:L19,L30`.
-- **Frontend** — every frontend CI job begins with `npm ci`, which installs
-  strictly from a committed lockfile, but no `package-lock.json` is committed; a
-  local `npm install` must be run first to generate one. **Maturity: Provisioned**
-  (dependencies declared, lockfile absent).
-  `Source: .github/workflows/frontend-ci.yml:L18,L29,L40`.
+- **Backend** — no `go.mod`/`go.sum` is committed anywhere in the repository
+  (`Source: repository root (no go.mod/go.sum present)`), so the CI build and test
+  commands `go build -v ./...` and `go test -v ./...`
+  (`Source: .github/workflows/backend-ci.yml:L19,L30`) have no module context and
+  cannot resolve imports or compile as-is. **Maturity: Designed** (build module
+  absent).
+- **Frontend** — every frontend CI job begins with `npm ci`
+  (`Source: .github/workflows/frontend-ci.yml:L18,L29,L40`), which installs
+  strictly from a committed lockfile; but no `package-lock.json` is committed
+  (`Source: frontend/ (no package-lock.json present)`), so a local `npm install`
+  must be run first to generate one. **Maturity: Provisioned** (dependencies
+  declared, lockfile absent).
 
 The authoritative Implemented / Provisioned / Designed matrix and the full defect
 catalog are maintained in

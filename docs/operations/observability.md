@@ -63,6 +63,21 @@ Sources for `Fig O1`: `Source: backend/internal/api/routes.go:L13-L14` (Gin logg
 
 **Local verification (static only today).** Because the backend does not compile (see [`runbook.md`](runbook.md) FM-4), there is no running API to exercise and no stdout log line to observe at this checkpoint; runtime verification is gated on resolving those compile blockers. What is verifiable statically today: `grep -n "gin.Logger()\|gin.Recovery()" backend/internal/api/routes.go` confirms the middleware call sites exist in source, and `grep -rn "logger.Error" backend/internal/tasks` confirms the worker call sites exist in source. `grep -rn "\"backend/pkg/logger\"" backend` shows the import while `ls backend/pkg/logger` returns no such directory, confirming the logging package is absent. Once the compile blockers are resolved, the runtime check is: start the API, issue a request, and observe the access line on stdout.
 
+### Logging allowlist and redaction contract (Designed)
+
+The application logs nothing today — the backend does not compile and the SPA does not build — so this is a **Designed** contract to enforce when structured logging ships, not a runtime guarantee. It is stated here so the logger, the dashboard log panel, and any log aggregation are built to it from the start.
+
+**Allowlist — fields that MAY be logged.** Timestamp, level, message, correlation/request ID (`request_id` / `X-Request-ID`), HTTP method, route *template* (not the raw URL with its query string), status code, latency, error class/category, and non-secret resource identifiers (`txID`, `signatureID`, `vaultId`, `userId`, `organizationId`).
+
+**Denylist — MUST NEVER be logged (redact or drop before emission).** `Authorization` headers and bearer tokens; issued JWTs; `Cookie` / `Set-Cookie` values; passwords and password hashes; API keys (`Organization.APIKey` — `Source: backend/internal/db/schema.go:L15`); raw signature material (`Signature.RawSignature` — `Source: backend/internal/db/schema.go:L64`); and full request or response bodies (which can carry any of the above). Query strings must be stripped or redacted because they can transport tokens.
+
+**Current source-present concerns (documented, not fixed).** Two call sites log an entire error object, which can transitively include secret-bearing request data and would violate the contract once the code runs:
+
+- Backend workers call `logger.Error("...", "error", err, ...)`, logging the whole `err` value. `Source: backend/internal/tasks/signature_processor.go:L42`, `Source: backend/internal/tasks/transaction_processor.go:L44`.
+- The frontend logs the full Axios error on a failed login — `console.error('Login failed:', error)` — where `error` typically carries `config.data` (the submitted `{ username, password }`), so the plaintext password can be written to the browser console. `Source: frontend/src/services/auth.ts:L14`.
+
+Per the AAP these are **documented, not fixed** (no source code is modified); the contract above is the target behavior the structured logger must implement — emit an error class and sanitized message, never the raw error object, headers, or request body. This contract governs the worker-error log panel in [`dashboard-template.json`](dashboard-template.json), which must project only the allowlisted fields and never render raw messages or bodies.
+
 ## Pillar 2 — Distributed tracing
 
 **Reused (source-present).** None. There is no tracing instrumentation in the codebase today.
@@ -91,7 +106,7 @@ Sources for `Fig O1`: `Source: backend/internal/api/routes.go:L13-L14` (Gin logg
 
 **Reused (source-present).** None committed.
 
-**Added (Designed).** A Grafana-compatible dashboard template ships with this documentation at [`dashboard-template.json`](dashboard-template.json). It contains health/readiness stat panels, request-rate and p95-latency time series, a worker-error log panel (bound to the source-present `logger.Error(...)` call sites, which depend on the absent `pkg/logger` and therefore emit nothing today — non-buildable, not a live signal), a settlement-lag time series, a signature-poll-interval stat, and a trace-error-rate panel. Every panel is maturity-labeled and cited; because the backend does not compile, **no panel binds to a signal that is emitted today** — every panel is either **Designed** (absent capability) or bound to a **source-present (non-buildable)** call site.
+**Added (Designed).** A Grafana-compatible dashboard template ships with this documentation at [`dashboard-template.json`](dashboard-template.json). It contains health/readiness stat panels, request-rate and p95-latency time series, a worker-error log panel (bound to the source-present `logger.Error(...)` call sites, which depend on the absent `pkg/logger` and therefore emit nothing today — non-buildable, not a live signal), a settlement-lag time series, a signature-poll-interval stat, and a trace-error-rate panel. Every panel is maturity-labeled and cited; because the backend does not compile, **no panel binds to a signal that is emitted today** — every panel is either **Designed** (absent capability) or bound to a **source-present (non-buildable)** call site. The worker-error log panel is additionally governed by the [logging allowlist and redaction contract](#logging-allowlist-and-redaction-contract-designed): it must project only sanitized, allowlisted fields and never render raw messages, headers, tokens, or request/response bodies.
 
 **Local verification.** `python3 -c "import json; d=json.load(open('docs/operations/dashboard-template.json')); print(len(d['panels']))"` prints `11` and confirms the template is valid JSON.
 

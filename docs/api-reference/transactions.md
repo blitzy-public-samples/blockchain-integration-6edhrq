@@ -44,7 +44,7 @@ The transaction **status** vocabulary differs between the backend and the fronte
 
 The backend sets `db.TransactionStatusPending` on create and `db.TransactionStatusProcessed` on settlement, so its only two states are `Pending` and `Processed`. `Source: backend/internal/core/transaction/service.go:L46,L81`. The frontend Zod schema instead validates the three-state vocabulary `['Pending', 'Completed', 'Failed']`. `Source: frontend/src/schema/transaction.ts:L10`. A client that expects `Completed`/`Failed` will never match the backend's `Processed` state. This and the other design-versus-scaffold gaps are tracked in [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md).
 
-The `blockchainType` values `XRP` / `Ethereum` line up conceptually across both layers, but the constraint exists only on the client: the frontend Zod schema enumerates `z.enum(['XRP', 'Ethereum'])`, whereas the backend field is a plain, unconstrained `string`. The backend enumeration is therefore **Designed** (client-enforced today, not schema-enforced). `Source: backend/internal/db/schema.go:L50`, `Source: frontend/src/schema/transaction.ts:L11`.
+The `blockchainType` values `XRP` / `Ethereum` line up conceptually across both layers, but the constraint is written only on the client: the frontend Zod schema enumerates `z.enum(['XRP', 'Ethereum'])`, whereas the backend field is a plain, unconstrained `string`. The backend enumeration is therefore **Designed** — and even the client-side check is **intended, not enforced today**: the frontend Zod schema is source-present but non-buildable (it imports `zod`, which `frontend/package.json` does not declare), so no validation actually runs on either layer at this checkpoint. `Source: backend/internal/db/schema.go:L50`, `Source: frontend/src/schema/transaction.ts:L11`, `Source: frontend/package.json`.
 
 ## POST /transactions/create
 
@@ -76,8 +76,10 @@ The `blockchainType` values `XRP` / `Ethereum` line up conceptually across both 
 
 ```bash
 curl -X POST http://localhost:8080/transactions/create -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" -d '{"vaultId":"1b4e28ba-2fa1-11d2-883f-0016d3cca427","toAddress":"rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe","amount":"10.5"}'
+  -H "Content-Type: application/json" -d '{"vaultId":"1b4e28ba-2fa1-11d2-883f-0016d3cca427","toAddress":"<xrp-destination-address>","amount":"10.5"}'
 ```
+
+> **Address examples — test values only, never send funds (applies to every example on this page).** The `toAddress` shown is an unmistakable placeholder (`<xrp-destination-address>`) that is **not** a valid, sendable account. Do not copy it into a live request; when exercising the API against a running environment, substitute a destination you control on a **test network only** (for example the XRPL Testnet) and never transmit real funds or mainnet transactions to any value taken from this document.
 
 **Response example** (`201 Created`).
 
@@ -257,8 +259,8 @@ Key points for API consumers:
 - `status` is the backend lifecycle status, one of `Pending` or `Processed`; see [Status vocabulary mismatch](#status-vocabulary-mismatch) for the frontend divergence. `Source: backend/internal/core/transaction/service.go:L46,L81`.
 - `amount` is an arbitrary-precision decimal (`decimal.Decimal` in code) and is serialized as a JSON **string** (for example `"10.5"`) to avoid floating-point rounding. The frontend Zod schema types it as a number, a documented divergence. `Source: backend/internal/db/schema.go:L52`, `Source: frontend/src/schema/transaction.ts:L13`.
 - `txHash` is empty on creation and is populated only after asynchronous settlement broadcasts the transaction on-chain. `Source: backend/internal/core/transaction/service.go:L82`.
-- `blockchainType` is a plain `string` in code; the enumerated chains `XRP` / `Ethereum` are enforced only by the frontend Zod schema and are **Designed** on the backend. `Source: backend/internal/db/schema.go:L50`, `Source: frontend/src/schema/transaction.ts:L11`.
-- `metadata` is a free-form JSON object persisted as JSONB via `gorm.JSONMap`. `Source: backend/internal/db/schema.go:L53`.
+- `blockchainType` is a plain `string` in code; the enumerated chains `XRP` / `Ethereum` are specified only by the frontend Zod schema — which is source-present but non-buildable (`zod` is undeclared in `frontend/package.json`), so the client check is **intended, not enforced today** — and the enumeration is **Designed** on the backend. `Source: backend/internal/db/schema.go:L50`, `Source: frontend/src/schema/transaction.ts:L11`, `Source: frontend/package.json`.
+- `metadata` is a free-form JSON object *intended* to persist as JSONB via `gorm.JSONMap` — **Designed**, not functional: `gorm.JSONMap` is undefined in `gorm.io/gorm`, so `schema.go` does not compile as-declared and no JSONB column is created (see [`../architecture/data-model.md#notable-field-types`](../architecture/data-model.md#notable-field-types)). `Source: backend/internal/db/schema.go:L53`.
 - The command path accepts a `toAddress` and builds a `rawTx`, but the persisted `Transaction` entity in `schema.go` declares neither a `toAddress` nor a `rawTx` column — a **Designed** persistence gap tracked in [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md). `Source: backend/internal/core/transaction/service.go:L44,L47`, `Source: backend/internal/db/schema.go:L44-L56`.
 
 ## Related documentation

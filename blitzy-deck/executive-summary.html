@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- F21-A11Y: zoom is left explicitly enabled (WCAG 1.4.4 Resize Text / 1.4.10 Reflow);
+       the deck never locks user scaling so low-vision users can pinch/keyboard-zoom. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
   <title>Blockchain Integration Service &amp; Dashboard — Executive Summary</title>
 
   <!--
@@ -15,10 +17,15 @@
     genuinely needs:
       * script-src  — reveal.js/lucide (classic) + the Mermaid ES module import,
                       all from jsdelivr; 'unsafe-inline' for the inline <script>
-                      blocks and 'unsafe-eval' because Mermaid's layout engine
-                      compiles helper functions at runtime. A nonce/hash-based
-                      policy is the Designed hardening once a build/serve step
-                      exists to inject per-load nonces (a static file cannot).
+                      blocks. 'unsafe-eval' is intentionally NOT granted (F14
+                      hardening): it was previously assumed necessary for Mermaid's
+                      layout engine, but was tested empirically and Mermaid 11.4.0's
+                      dagre-based flowchart rendering uses no eval/Function
+                      compilation — all five diagrams render with zero CSP
+                      violations without it. The remaining Designed hardening is a
+                      nonce/hash-based policy that also drops 'unsafe-inline', once a
+                      build/serve step exists to inject per-load nonces (a static
+                      file cannot).
       * style-src   — Google Fonts stylesheet + reveal.js/Mermaid inject inline
                       styles, so 'unsafe-inline' is required for a static file.
       * font-src    — Google Fonts binaries from fonts.gstatic.com.
@@ -39,7 +46,7 @@
   -->
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none';
-                 script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline' 'unsafe-eval';
+                 script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';
                  style-src 'self' https://fonts.googleapis.com https://cdn.jsdelivr.net 'unsafe-inline';
                  font-src https://fonts.gstatic.com;
                  img-src 'self' data:;
@@ -119,6 +126,17 @@
      * 2. Base reveal.js surfaces — default (content) slides
      * --------------------------------------------------------------------- */
     .reveal-viewport { background: var(--blitzy-surface-0); }
+    /* F20-A11Y (nav-control contrast root cause): content slides keep the white viewport,
+       but on the dark title/divider/closing slides that white surface becomes a letterbox
+       the white nav arrows disappear against. Darken the viewport to navy whenever a dark
+       slide is present (live :has()), so the controls — and any residual letterbox bar at
+       non-16:9 sizes — sit on a dark ground (white arrow on navy = 16:1). Token-based;
+       reverts to the white surface on content slides automatically. */
+    .reveal-viewport:has(section.present.slide-title),
+    .reveal-viewport:has(section.present.slide-divider),
+    .reveal-viewport:has(section.present.slide-closing) {
+      background: var(--blitzy-primary-navy);
+    }
 
     .reveal {
       font-family: var(--ff-body);
@@ -196,7 +214,11 @@
       font-size: 2.6em;
       color: var(--blitzy-text-invert);
     }
-    .reveal .slides section.slide-title p { color: rgba(255, 255, 255, 0.86); }
+    /* F20-WCAG: subtitle/audience use SOLID white (was rgba white 0.86 = 3.42:1 on the
+       lightest hero stop). Solid #FFFFFF clears WCAG AA on the hero gradient — 6.32:1 on
+       the dominant #5B39F3, 9.33:1 on #4101DB; the .deck-subtitle is large text (>=24px).
+       The token value is unchanged; only its use context (opacity) is corrected. */
+    .reveal .slides section.slide-title p { color: var(--blitzy-text-invert); }
 
     /* 3.2 Section divider — dark purple / gradient, centered title + hero icon */
     .reveal .slides section.slide-divider {
@@ -230,8 +252,10 @@
       font-size: 2.3em;
       color: var(--blitzy-text-invert);
     }
+    /* F20-WCAG: closing body copy uses SOLID white (was rgba white 0.82). Solid #FFFFFF
+       on the navy closing ground is 16.36:1. Token value unchanged; opacity removed. */
     .reveal .slides section.slide-closing p,
-    .reveal .slides section.slide-closing li { color: rgba(255, 255, 255, 0.82); }
+    .reveal .slides section.slide-closing li { color: var(--blitzy-text-invert); }
 
     /* -----------------------------------------------------------------------
      * 4. Component classes
@@ -251,6 +275,17 @@
     .reveal .slide-title .eyebrow,
     .reveal .slide-divider .eyebrow,
     .reveal .slide-closing .eyebrow { color: var(--blitzy-accent-teal); }
+    /* F20-WCAG: on the TITLE slide the teal eyebrow sits over the lightest hero stop
+       (#7A6DEC), where teal is only 3.23:1 (fails AA for this ~17px normal-weight text).
+       A solid navy backing chip (existing token, unchanged value) lifts teal-on-navy to
+       13.16:1. Divider (min 5.08:1) and closing (13.16:1) eyebrows already pass, so no
+       chip is applied there. The chip only changes the token's use context. */
+    .reveal .slide-title .eyebrow {
+      display: inline-block;
+      background: var(--blitzy-primary-navy);
+      padding: 0.3em 0.7em;
+      border-radius: 4px;
+    }
 
     /* 4.2 Accent bar — thin gradient rule */
     .reveal .accent-bar {
@@ -592,11 +627,14 @@
       left: 0;
       bottom: 0.6em;
       font-family: var(--ff-mono);
-      font-size: 0.34em;
+      /* F21-READABILITY: bumped from 0.34em (~11.6px) to 0.44em (~15px) so citations
+         stay legible when the 1920x1080 canvas is scaled down for projection or a
+         narrow window; @media rules below enlarge it further at small widths. */
+      font-size: 0.44em;
       font-weight: 400;
       letter-spacing: 0.01em;
       color: var(--blitzy-text);
-      opacity: 0.92;
+      opacity: 1;
       margin: 0;
       max-width: 96%;
       word-break: break-word;
@@ -634,6 +672,49 @@
       outline-offset: 2px;
       box-shadow: 0 0 0 5px var(--blitzy-accent-teal);
       border-radius: 6px;
+    }
+
+    /* F20-WCAG: reveal.js leaves the navigation-arrow glyphs a low-contrast grey that
+       drops to ~1.1-2.7:1 over the dark title/divider/closing grounds (fails WCAG 1.4.11
+       Non-text Contrast, >=3:1). Scope a token-based glyph colour to whichever dark
+       slide type is present: white default and teal hover both clear 3:1 on every dark
+       ground used (min 6.32:1 white / 5.08:1 teal on #5B39F3; 3.23:1 teal on the lightest
+       hero stop). reveal's .controls-arrow pseudo-elements paint with currentColor, so
+       setting `color` on the button re-tints the glyph. Disabled arrows are exempt from
+       1.4.11 but are given a muted token for a clear affordance. Brand tokens only — no
+       hardcoded colours and no token-value changes. The focus ring above is unchanged.
+       Mirrors section 8 of blitzy-deck/references/blitzy-reveal-theme.css. */
+    .reveal:has(section.present.slide-title) .controls button,
+    .reveal:has(section.present.slide-divider) .controls button,
+    .reveal:has(section.present.slide-closing) .controls button {
+      color: var(--blitzy-text-invert);
+    }
+    .reveal:has(section.present.slide-title) .controls button:hover,
+    .reveal:has(section.present.slide-divider) .controls button:hover,
+    .reveal:has(section.present.slide-closing) .controls button:hover {
+      color: var(--blitzy-accent-teal);
+    }
+    .reveal:has(section.present.slide-title) .controls button:disabled,
+    .reveal:has(section.present.slide-divider) .controls button:disabled,
+    .reveal:has(section.present.slide-closing) .controls button:disabled {
+      color: var(--blitzy-text-muted);
+    }
+
+    /* -----------------------------------------------------------------------
+     * F21-RESPONSIVE: reveal.js scales the 1920x1080 canvas uniformly, so on small
+     * windows/projectors the densest content and the smallest text shrink hardest.
+     * The KPI and value grids already reflow via auto-fit minmax(); these queries
+     * additionally enlarge the citation line and relax dense spacing so the deck
+     * stays legible at narrow widths. Brand tokens only; no token-value changes.
+     * ------------------------------------------------------------------------- */
+    @media (max-width: 1200px) {
+      .reveal .source-note { font-size: 0.52em; }
+      .reveal .icon-row { gap: 28px; }
+    }
+    @media (max-width: 800px) {
+      .reveal .source-note { font-size: 0.62em; }
+      .reveal table { font-size: 0.92em; }
+      .reveal .icon-row { gap: 18px; }
     }
   </style>
 </head>
@@ -706,7 +787,7 @@
             <span class="kpi-label">Defects documented honestly</span>
           </div>
         </div>
-        <p class="source-note"><span class="src-label">Source</span>backend/internal/api/routes.go:L9-L54; backend/internal/db/schema.go:L11-L68</p>
+        <p class="source-note"><span class="src-label">Source</span>62 files: repository root; 18 endpoints: backend/internal/api/routes.go:L9-L54; 5 entities: backend/internal/db/schema.go:L11-L68; 5 features: SRS VM/SG/TP/UA/MA-001; 5 observability pillars: docs/operations/observability.md; 12 defects: docs/architecture/scaffold-vs-design.md</p>
       </section>
 
       <!-- ================= SLIDE 4 — DIVIDER: ARCHITECTURE ================= -->
@@ -802,7 +883,7 @@ flowchart TD
         <h2><span class="kpi-icon h2-icon" aria-hidden="true"><i data-lucide="database"></i></span>The Domain in Five Entities</h2>
         <table>
           <thead>
-            <tr><th>Entity</th><th>Purpose</th><th>Key relationships</th></tr>
+            <tr><th>Entity</th><th>Purpose</th><th>Key relationships (logical)</th></tr>
           </thead>
           <tbody>
             <tr><td>Organization</td><td>Tenant boundary</td><td>Has many Users and Vaults</td></tr>
@@ -812,7 +893,7 @@ flowchart TD
             <tr><td>Signature</td><td>Signing artifact</td><td>Belongs to a Vault &amp; User</td></tr>
           </tbody>
         </table>
-        <p class="fig-caption">A documented data-model cleanup item: each entity carries two identifiers, flagged for engineering follow-up.</p>
+        <p class="fig-caption">Relationships shown are logical Go-struct associations, not database foreign-key constraints — none are enforced at the schema level today. A documented data-model cleanup item: each entity carries two identifiers (embedded <code>gorm.Model</code> plus a redeclared <code>ID uuid.UUID</code>), flagged for engineering follow-up.</p>
         <p class="source-note"><span class="src-label">Source</span>backend/internal/db/schema.go:L11-L68</p>
       </section>
 
@@ -858,7 +939,7 @@ flowchart LR
           <tbody>
             <tr><td>Startup wiring defects — router signature <code>SetupRouter()</code>, ticker <code>time.NewTicker(0)</code></td><td>Documented with exact locations for engineering follow-up</td></tr>
             <tr><td>API path disagreement across layers — <code>/vault</code> vs <code>/vaults</code></td><td>Reconciled in the API reference</td></tr>
-            <tr><td>Outdated project README — wrong stack, dead links</td><td>Correction documented; README update pending as a separate deliverable</td></tr>
+            <tr><td>Outdated project README — wrong stack, dead links</td><td>Corrected in this documentation set — stack fixed to Go/Gin/PostgreSQL/Redis and dead links resolved</td></tr>
           </tbody>
         </table>
         <div class="icon-row">
@@ -892,8 +973,8 @@ flowchart LR
         C_FE["Frontend: console.* logs"]
         C_PING["Liveness: db.Ping() + redisClient.Ping(ctx)"]
         C_LOGGER["pkg/logger (imported, ABSENT)"]
-        C_API --> C_STDOUT["stdout / container logs (no aggregation)"]
-        C_WORK --> C_STDOUT
+        C_API -.->|"intended (does not run today)"| C_STDOUT["stdout / container logs (intended sink; nothing emits today)"]
+        C_WORK -.->|"intended (does not run today)"| C_STDOUT
         C_WORK -.->|"depends on"| C_LOGGER
     end
     subgraph Designed["Designed - Target (added, absent today)"]
@@ -1062,7 +1143,18 @@ flowchart TD
       transition: 'slide',
       controlsTutorial: false,
       width: 1920,
-      height: 1080
+      height: 1080,
+      // F20-A11Y (nav-control contrast on dark slides). The five keys above are the
+      // AAP Section 0.10.2 pinned values and are unchanged. Two accessibility keys are
+      // added (the AAP is silent on both): `margin: 0` removes reveal's default 4%
+      // inset so the dark title/divider/closing backgrounds fill the 16:9 viewport
+      // instead of being framed by a white letterbox that made the white nav arrows
+      // vanish; `controlsBackArrows: 'visible'` stops reveal fading the *enabled*
+      // back-arrow to opacity 0.3 (which measured 2.52:1 on navy, below WCAG 1.4.11).
+      // A per-slide navy letterbox rule in the theme handles any residual bars at
+      // non-16:9 sizes so the controls always sit on a dark ground.
+      margin: 0,
+      controlsBackArrows: 'visible'
     });
 
     // Diagram rendering uses Mermaid 11's mermaid.run() on 'ready' and every

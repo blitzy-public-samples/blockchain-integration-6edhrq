@@ -1,6 +1,6 @@
 # Blockchain Integration Service and Dashboard — Documentation
 
-This `docs/` tree is the developer-, operator-, and reviewer-facing documentation for the Blockchain Integration Service and Dashboard **as the system actually exists on disk today** — an early-stage Go/React scaffold — and it reconciles that reality against the aspirational design corpus under [`documentation/`](#design-references). The documented subject is a **custodial blockchain platform** whose domain is **vaults, signatures, and transactions**, served over **18 REST endpoints** by a **Go/Gin backend** persisting to **PostgreSQL and Redis**. `Source: backend/internal/api/routes.go:L9-L54` The persisted domain is modelled as five entities — `Organization`, `User`, `Vault`, `Transaction`, and `Signature`. `Source: backend/internal/db/schema.go:L11-L68` The dashboard is a **React 18 + TypeScript** single-page application built with Create React App and Redux Toolkit. `Source: frontend/package.json`
+This `docs/` tree is the developer-, operator-, and reviewer-facing documentation for the Blockchain Integration Service and Dashboard **as the system actually exists on disk today** — an early-stage Go/React scaffold — and it reconciles that reality against the aspirational design corpus under [`documentation/`](#design-references). The documented subject is a **custodial blockchain platform** whose domain is **vaults, signatures, and transactions**, served over **18 REST endpoints** by a **Go/Gin backend** that is **Designed** to persist to **PostgreSQL and Redis** (the persistence code is source-present but non-buildable). `Source: backend/internal/api/routes.go:L9-L54` The domain is modelled as five entities — `Organization`, `User`, `Vault`, `Transaction`, and `Signature`. `Source: backend/internal/db/schema.go:L11-L68` The dashboard is a **React 18 + TypeScript** single-page application built with Create React App; its state layer uses Redux Toolkit, which is imported in source but **not declared** in `package.json` (an undeclared dependency). `Source: frontend/src/store/index.ts:L1`, `Source: frontend/package.json`
 
 > **Design corpus vs. as-built.** The three documents under `documentation/` — the [Software Project Proposal](<../documentation/Software Project Proposal.md>), the [Software Requirements Specification (SRS)](<../documentation/Software Requirements Specifications (SRS).md>), and the [Technical Specifications](<../documentation/Technical Specifications.md>) — remain the authoritative **design** references (what the system is intended to become). This `docs/` tree documents the **as-built** system (what is present in code now) and labels every capability's maturity so the two are never confused. Where they diverge, the code is authoritative and the divergence is documented, not hidden.
 
@@ -8,17 +8,17 @@ This `docs/` tree is the developer-, operator-, and reviewer-facing documentatio
 
 Every capability across this documentation set is tagged with a project-wide maturity discipline so readers can distinguish what is present in code from what is only specified:
 
-- **Implemented** — present and working in the code today. At this checkpoint this label is **reserved**: nothing currently qualifies for the unqualified `Implemented` because the backend has no committed `go.mod` and does not build end-to-end. `Source: backend/cmd/server/main.go:L52`
+- **Implemented** — present and working in the code today. At this checkpoint this label is **reserved**: nothing currently qualifies for the unqualified `Implemented` because the backend has no committed `go.mod` (`Source: repository root (no go.mod present)`) and does not build end-to-end — for example the composition root calls `SetupRouter` with four arguments against a zero-argument definition (`Source: backend/cmd/server/main.go:L52`, `Source: backend/internal/api/routes.go:L9`).
 - **Provisioned** — infrastructure or configuration exists in source, but the capability is not yet fully wired or exercised.
 - **Designed** — specified in the design corpus (`documentation/*.md`), but not yet built (absent from code).
 
 The **authoritative, full vocabulary** — including the composite qualifiers *Implemented-with-defects (source-present, non-buildable)* and *Implemented-but-broken*, together with the consolidated maturity matrix and the complete defect catalog — lives in the reconciliation page's [Maturity Legend](architecture/scaffold-vs-design.md#maturity-legend). Sibling pages defer to it.
 
-> **Known code defects are documented honestly, not fixed.** The scaffold contains concrete, verified gaps — an uninitialized ticker interval that panics at startup `Source: backend/internal/tasks/transaction_processor.go:L13-L16`, a router-signature mismatch between the composition root's four-argument call and the router's zero-argument definition `Source: backend/cmd/server/main.go:L52`, `Source: backend/internal/api/routes.go:L9`, backend packages that are imported but absent, and no committed `go.mod`. These are catalogued in full in [`architecture/scaffold-vs-design.md`](architecture/scaffold-vs-design.md) rather than silently omitted.
+> **Known code defects are documented honestly, not fixed.** The scaffold contains concrete, verified gaps — an uninitialized ticker interval that panics at startup `Source: backend/internal/tasks/transaction_processor.go:L13-L16`, a router-signature mismatch between the composition root's four-argument call and the router's zero-argument definition `Source: backend/cmd/server/main.go:L52`, `Source: backend/internal/api/routes.go:L9`, backend packages that are imported (`Source: backend/cmd/server/main.go:L6-L12`) but absent from the tree, and no committed `go.mod` (`Source: repository root (no go.mod present)`). These are catalogued in full in [`architecture/scaffold-vs-design.md`](architecture/scaffold-vs-design.md) rather than silently omitted.
 
 ## Documentation Map
 
-The tree is organized into seven sections plus a leadership-facing executive summary, as shown in **Figure IX1**. Start from your audience row in the [Audiences](#audiences) table below, then use the [Navigation](#navigation) section for the full page list.
+The tree is organized into eight sections plus a leadership-facing executive summary, as shown in **Figure IX1**. Start from your audience row in the [Audiences](#audiences) table below, then use the [Navigation](#navigation) section for the full page list.
 
 **Figure IX1 — Documentation Map (sections of the `docs/` tree and their entry points)**
 
@@ -34,8 +34,9 @@ flowchart TD
     Index --> ARCH["Architecture"]
     Index --> API["API Reference"]
     Index --> GUIDE["Guides"]
-    Index --> OPS["Operations"]
+    Index --> OPS["Operations (incl. System Administration)"]
     Index --> SEC["Security"]
+    Index --> TRAIN["Training"]
     Index --> CONTRIB["Contributing"]
     Index --> DECK["Executive Summary (leadership)"]
 
@@ -55,9 +56,11 @@ Pick your starting point by role. Every path below resolves within this tree exc
 | Audience | Start here |
 |----------|------------|
 | New developers | [Installation](getting-started/installation.md), then [Local Development](getting-started/local-development.md) |
+| New team members / trainees | [Training Materials](training/training-materials.md) — the role-based onboarding course |
 | Backend / API engineers | [Backend Architecture](architecture/backend.md) and [API Reference — Overview](api-reference/overview.md) |
 | Frontend engineers | [Frontend Architecture](architecture/frontend.md) |
 | Operators / SRE | [Observability](operations/observability.md) and [Operations Runbook](operations/runbook.md) |
+| System administrators / DevOps | [System Administration Guide](operations/system-administration.md) |
 | Security reviewers | [Security Model](security/security-model.md) |
 | Contributors | [Development Workflow](contributing/development.md) and [Testing Strategy](contributing/testing.md) |
 | Non-technical leadership / executives | [Executive Summary](../blitzy-deck/executive-summary.html) (self-contained presentation) |
@@ -101,13 +104,18 @@ The backend exposes **18 REST endpoints** with no `/api/v1` prefix and a singula
 
 ### Operations
 
-- [`operations/observability.md`](operations/observability.md) — Structured logging with correlation IDs, distributed tracing, a `/metrics` endpoint, and health/readiness checks, stating precisely what is **reused** (Gin access logging, worker structured logging) versus **added** (**Designed** correlation IDs, tracing, metrics, health endpoints).
+- [`operations/observability.md`](operations/observability.md) — Structured logging with correlation IDs, distributed tracing, a `/metrics` endpoint, and health/readiness checks, stating precisely what is **reused** (Gin access logging and worker structured logging — both **emission-only** and **source-present (non-buildable)**, so they do not run today) versus **added** (**Designed** correlation IDs, tracing, metrics, health endpoints).
+- [`operations/system-administration.md`](operations/system-administration.md) — The consolidated system-administration guide: configuration, deployment, database and cache administration, backup and recovery, monitoring, user and role administration, security administration, and incident response.
 - [`operations/runbook.md`](operations/runbook.md) — Alerts and failure modes, including the startup ticker panic and settlement-retry behavior.
 - [`operations/dashboard-template.json`](operations/dashboard-template.json) — The observability dashboard template (metric, log, and health panels).
 
 ### Security
 
 - [`security/security-model.md`](security/security-model.md) — Role-based access control (Admin/Manager/Operator/Auditor/API User), JWT with refresh tokens, multi-factor authentication, and encryption.
+
+### Training
+
+- [`training/training-materials.md`](training/training-materials.md) — The role-based onboarding and training course, delivering the proposal's written guides for common operations (with operator/dashboard depth) and labeling the video tutorials as **Designed**.
 
 ### Contributing
 
@@ -142,4 +150,4 @@ Three divergences between the code, the frontend, and the design corpus are load
 
 ## Maintaining This Documentation
 
-Every technical claim in this tree carries an inline `Source: <path>:<locator>` citation so it can be re-verified against the code when the code changes, and every capability is labeled **Implemented**, **Provisioned**, or **Designed**. When a source file changes, update the pages that cite it and re-check their maturity labels against the authoritative [Maturity Legend](architecture/scaffold-vs-design.md#maturity-legend).
+This tree **aims** to attach an inline `Source: <path>:<locator>` citation to every technical claim so it can be re-verified against the code, and to label every capability with its maturity (**Implemented**, **Source-present (non-buildable)**, **Provisioned**, or **Designed**). Treat this as the maintenance standard rather than a guarantee that every line already meets it: where a citation or label is found to be missing, imprecise, or stale, correct it against the source. When a source file changes, update the pages that cite it and re-check their maturity labels against the authoritative [Maturity Legend](architecture/scaffold-vs-design.md#maturity-legend).

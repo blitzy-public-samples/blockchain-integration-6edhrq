@@ -4,9 +4,15 @@ info:
   version: 0.1.0
   description: |
     Machine-readable OpenAPI 3.0 specification for the Blockchain Integration
-    Service backend HTTP contract, documented **exactly as wired in code** — not
-    an aspirational target. It enumerates all 18 REST endpoints across the
-    Authentication, Vaults, Transactions, and Signatures resources.
+    Service backend HTTP contract. **Route and HTTP-method parity is
+    source-derived**: every path and method below is taken directly from the
+    router, which registers all 18 REST endpoints across the Authentication,
+    Vaults, Transactions, and Signatures resources, and no route or method is
+    invented beyond those 18. **Request and response bodies are Designed/inferred,
+    not a verified executable contract**: the handler package does not compile,
+    most handlers carry no readable body-binding code, and the Go entity structs
+    have no `json` tags, so the schemas below are the *intended* shapes rather
+    than a byte-for-byte contract observed at runtime.
     Source: backend/internal/api/routes.go:L9-L54.
 
     Maturity discipline (per operation): every operation is annotated in its
@@ -32,6 +38,15 @@ info:
     `CreatedAt`, `UpdatedAt`) plus a promoted `DeletedAt`. See
     docs/api-reference/overview.md (Response Serialization).
     Source: backend/internal/db/schema.go:L11-L68.
+
+    **Blockchain address examples — test values only, never send funds.** Every
+    XRP Ledger address in this specification is an unmistakable placeholder
+    (`<xrp-vault-address>`, `<xrp-destination-address>`) that is **not** a valid,
+    sendable account. Placeholders are illustrative only: do not copy them into a
+    live request, and never transmit real funds or mainnet transactions to any
+    address taken from this document. When exercising the API against a running
+    environment, substitute an account you control on a **test network only**
+    (for example the XRPL Testnet); treat any example value as non-spendable.
 
     Path fidelity and known divergences (documented here, never silently
     reconciled — the paths below are the ACTUAL code paths):
@@ -272,7 +287,7 @@ paths:
                 organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
                 name: Treasury Vault
                 blockchainType: XRP
-                address: rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+                address: "<xrp-vault-address>"
                 metadata: {}
                 createdAt: '2024-01-15T09:30:00Z'
                 updatedAt: '2024-01-15T09:30:00Z'
@@ -328,7 +343,7 @@ paths:
                   organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
                   name: Treasury Vault
                   blockchainType: XRP
-                  address: rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+                  address: "<xrp-vault-address>"
                   metadata: {}
                   createdAt: '2024-01-15T09:30:00Z'
                   updatedAt: '2024-01-15T09:30:00Z'
@@ -364,7 +379,7 @@ paths:
                 organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
                 name: Treasury Vault
                 blockchainType: XRP
-                address: rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+                address: "<xrp-vault-address>"
                 metadata: {}
                 createdAt: '2024-01-15T09:30:00Z'
                 updatedAt: '2024-01-15T09:30:00Z'
@@ -415,7 +430,7 @@ paths:
                 organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
                 name: Treasury Vault (renamed)
                 blockchainType: XRP
-                address: rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+                address: "<xrp-vault-address>"
                 metadata:
                   tier: cold
                 createdAt: '2024-01-15T09:30:00Z'
@@ -493,7 +508,7 @@ paths:
               $ref: '#/components/schemas/CreateTransactionRequest'
             example:
               vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
-              toAddress: rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe
+              toAddress: "<xrp-destination-address>"
               amount: '10.5'
       responses:
         '201':
@@ -956,9 +971,26 @@ components:
     Organization:
       type: object
       description: |
-        An organization (tenant). Fields mirror the GORM entity; see
+        An organization (tenant). This response schema is the **Designed** safe
+        DTO and deliberately **omits `apiKey`**. Security requirement (documented,
+        not fixed): the persisted `Organization` struct declares `APIKey` as a
+        plaintext `string` with **no `json:"-"` tag**, so if the code compiled and
+        marshaled an `Organization` directly the raw API key **would be exposed**
+        in every response and log. Treat the API key as a **secret**: the Designed
+        contract stores only a one-way **hash/verifier** (never the raw key),
+        reveals the raw key **exactly once** at creation via a separate
+        creation-only shape, **never** returns it in read responses or this
+        reusable DTO, and **redacts** it from logs. Omitting it here is therefore a
+        Designed contract, not the current code behavior. See
+        docs/security/security-model.md and docs/architecture/data-model.md
+        (Sensitive & Secret Fields). Other fields mirror the GORM entity; see
         docs/architecture/data-model.md (Fig M1) for the canonical definition.
-        Source: backend/internal/db/schema.go:L11-L18.
+        Source: backend/internal/db/schema.go:L11-L18 (specifically L15).
+      required:
+        - id
+        - name
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: string
@@ -967,9 +999,6 @@ components:
         name:
           type: string
           description: Organization display name.
-        apiKey:
-          type: string
-          description: Per-organization API key used for programmatic access.
         createdAt:
           type: string
           format: date-time
@@ -979,7 +1008,6 @@ components:
       example:
         id: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
         name: Acme Custody
-        apiKey: org_live_PLACEHOLDER_API_KEY
         createdAt: '2024-01-15T09:30:00Z'
         updatedAt: '2024-01-15T09:30:00Z'
     User:
@@ -993,6 +1021,14 @@ components:
         Omitting it here is therefore a Designed contract, not the current code
         behavior. See docs/security/security-model.md.
         Source: backend/internal/db/schema.go:L20-L30 (specifically L26).
+      required:
+        - id
+        - organizationId
+        - username
+        - email
+        - role
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: string
@@ -1033,6 +1069,14 @@ components:
         A custodial vault holding an on-chain address. See
         docs/architecture/data-model.md (Fig M1) for the canonical definition.
         Source: backend/internal/db/schema.go:L32-L42.
+      required:
+        - id
+        - organizationId
+        - name
+        - blockchainType
+        - address
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: string
@@ -1057,7 +1101,7 @@ components:
         metadata:
           type: object
           additionalProperties: true
-          description: Free-form JSON metadata (persisted as JSONB via gorm.JSONMap).
+          description: Free-form JSON metadata, intended to persist as JSONB via gorm.JSONMap (Designed; gorm.JSONMap is undefined in gorm.io/gorm, so it does not compile and no JSONB column is created).
         createdAt:
           type: string
           format: date-time
@@ -1069,7 +1113,7 @@ components:
         organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
         name: Treasury Vault
         blockchainType: XRP
-        address: rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+        address: "<xrp-vault-address>"
         metadata: {}
         createdAt: '2024-01-15T09:30:00Z'
         updatedAt: '2024-01-15T09:30:00Z'
@@ -1079,6 +1123,15 @@ components:
         A blockchain transaction. See docs/architecture/data-model.md (Fig M1)
         for the canonical definition.
         Source: backend/internal/db/schema.go:L44-L56.
+      required:
+        - id
+        - userId
+        - vaultId
+        - status
+        - blockchainType
+        - amount
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: string
@@ -1122,7 +1175,7 @@ components:
         metadata:
           type: object
           additionalProperties: true
-          description: Free-form JSON metadata (persisted as JSONB via gorm.JSONMap).
+          description: Free-form JSON metadata, intended to persist as JSONB via gorm.JSONMap (Designed; gorm.JSONMap is undefined in gorm.io/gorm, so it does not compile and no JSONB column is created).
         createdAt:
           type: string
           format: date-time
@@ -1146,6 +1199,13 @@ components:
         A custodial signature request and its result. See
         docs/architecture/data-model.md (Fig M1) for the canonical definition.
         Source: backend/internal/db/schema.go:L58-L68.
+      required:
+        - id
+        - userId
+        - vaultId
+        - status
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: string
@@ -1172,11 +1232,24 @@ components:
             Source: backend/internal/tasks/signature_processor.go:L46,L55.
         rawSignature:
           type: string
-          description: Raw custodian signature material.
+          description: |
+            **Sensitive cryptographic material** (raw custodian signature bytes).
+            Handling contract is **Designed** (documented, not enforced today):
+            classify as sensitive, minimize retention (the settlement path caches
+            the full signature object — including this field — under
+            `signature:<id>` in **unencrypted** Redis for 24 hours, a retention
+            concern to reduce), encrypt at rest and in transit, and **never log**.
+            It should normally be **omitted** from list/read responses and
+            surfaced only to authorized callers; it is retained in this schema
+            solely to document the persisted field. See
+            docs/security/security-model.md and docs/architecture/data-model.md
+            (Sensitive & Secret Fields).
+            Source: backend/internal/db/schema.go:L64,
+            Source: backend/internal/tasks/signature_processor.go:L46-L58.
         metadata:
           type: object
           additionalProperties: true
-          description: Free-form JSON metadata (persisted as JSONB via gorm.JSONMap).
+          description: Free-form JSON metadata, intended to persist as JSONB via gorm.JSONMap (Designed; gorm.JSONMap is undefined in gorm.io/gorm, so it does not compile and no JSONB column is created).
         createdAt:
           type: string
           format: date-time
@@ -1298,7 +1371,7 @@ components:
           description: Arbitrary-precision decimal amount serialized as a string.
       example:
         vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
-        toAddress: rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe
+        toAddress: "<xrp-destination-address>"
         amount: '10.5'
     UpdateTransactionRequest:
       type: object
