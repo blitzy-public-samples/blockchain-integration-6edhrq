@@ -75,9 +75,26 @@ go install github.com/swaggo/swag/cmd/swag@v1.16.6
 swag init -g backend/cmd/server/main.go -o docs/api-reference --parseDependency --parseInternal
 ```
 
+**Version metadata caveat.** The command above pins the module version `@v1.16.6`, but the installed binary self-reports a **different** version: `swag --version` prints `swag version v1.16.4`. This is an upstream release-metadata defect rather than a mis-resolved install — the `v1.16.6` tag ships a hard-coded version constant that was never bumped, and the CLI surfaces that constant verbatim as its reported version. `Source: github.com/swaggo/swag@v1.16.6/version.go:L4, github.com/swaggo/swag@v1.16.6/cmd/swag/main.go:L282`. Pin and verify the toolchain by **module version** — the `@v1.16.6` argument, recorded in `go.sum` once a module exists — and never by the binary's `--version` output, which cannot distinguish v1.16.4 from v1.16.6.
+
 **Important format caveat.** `swag` (v1.16.x, the current stable v1 line) emits **Swagger 2.0 (OpenAPI 2.0)** — `swagger.json` / `swagger.yaml` — **not** OpenAPI 3.0. `Source: https://github.com/swaggo/swag`. The `openapi.yaml` committed in this folder is an **OpenAPI 3.0** document, so it cannot be produced by `swag init` alone: a conversion step (for example `swagger2openapi`, or an equivalent 2.0→3.0 converter) would be required after generation, or the spec must be authored/maintained directly as OAS 3.0.
 
 This workflow is **Designed**. No swaggo `// @` annotations exist on the handlers yet, and the backend is not a Go module (there is no `go.mod`), so `swag init` cannot run against the code as it stands; Go must also be installed in the environment when documentation is built. `Source: backend/cmd/server/main.go`. Because of both the absent module and the 2.0-vs-3.0 format gap above, the `openapi.yaml` committed in this folder is **hand-authored** directly as OpenAPI 3.0 from the router, handlers, and database schema so that the machine-readable contract stays available and accurate in the interim.
+
+**Specification validation and accepted warnings.** Because the specification is hand-authored rather than generated, it is validated directly against the OpenAPI 3.0 schema. The committed document is **Implemented** — present, parseable, and schema-valid as OpenAPI 3.0.3 with zero errors across its 12 paths and 18 operations:
+
+```bash
+npx @redocly/cli@1.25.11 lint docs/api-reference/openapi.yaml   # exit 0: valid, 0 errors, 2 accepted warnings
+```
+
+That lint reports two warnings under the tool's built-in recommended ruleset. Both are **deliberately accepted** consequences of documenting a scaffold honestly, not specification defects, and neither affects OpenAPI 3.0 validity:
+
+| Rule | Location | Warning | Why it is accepted |
+|------|----------|---------|--------------------|
+| `no-server-example.com` | `openapi.yaml:82:10` | Server `url` should not point to example.com or localhost. | The only base URL that can honestly be published is illustrative. No `/api/v1` prefix exists in code, and the bind address is read from the **absent** `internal/config` package, so no resolvable host exists to cite; the `servers` entry states this inline rather than implying a deployed endpoint. `Source: docs/api-reference/openapi.yaml:L81-L92, backend/cmd/server/main.go:L59-L60` |
+| `no-unused-components` | `openapi.yaml:971:5` | Component: "Organization" is never used. | `Organization` is one of the five persisted entities, but **no route exposes an organization resource** — the router declares zero organization endpoints — so the schema is intentionally defined without any `$ref`. It is retained to carry the tenant entity's documented shape and its `apiKey` exposure disclosure. `Source: backend/internal/db/schema.go:L11, backend/internal/api/routes.go:L9-L54` |
+
+Enforcing this validation automatically is **Designed**: neither continuous-integration workflow validates the specification today, so the check is a manual documentation-build step. `Source: .github/workflows/backend-ci.yml, .github/workflows/frontend-ci.yml (no specification lint step present)`.
 
 ## Request and Response Conventions
 
@@ -97,7 +114,7 @@ As the domain types stand in source today, they carry **no `json` struct tags** 
 
 - Field keys would be the Go field names verbatim — `ID`, `Name`, `APIKey`, `OrganizationID`, `BlockchainType`, `TxHash`, `RawSignature`, `CreatedAt`, `UpdatedAt` — because there are no `json` tags to lower-case them.
 - The outer `ID uuid.UUID` shadows the embedded `gorm.Model.ID uint` (a shallower field wins in `encoding/json`), so `ID` serializes as the UUID; but the embedded `DeletedAt` is **not** shadowed, so it is **promoted and serialized** as an extra `DeletedAt` key (rendering as `null` for a live record, via `gorm.DeletedAt`'s `MarshalJSON`). `Source: backend/internal/db/schema.go:L12-L17`.
-- For `User`, `PasswordHash` has **no `json:"-"` tag**, so it would be **exposed in responses** — the security risk tracked as **F4-SEC-003** in [`../security/security-model.md`](../security/security-model.md). `Source: backend/internal/db/schema.go:L26`.
+- For `User`, `PasswordHash` has **no `json:"-"` tag**, so it would be **exposed in responses** — the security risk documented as a *"Security defect (documented, not fixed)"* under [Secrets and Key Management](../security/security-model.md#secrets-and-key-management) in the security model. `Source: backend/internal/db/schema.go:L26`.
 
 This entire path is **Source-present (non-buildable)** in any case: `schema.go` does not compile because `Metadata gorm.JSONMap` is an undefined type (see [`../architecture/data-model.md`](../architecture/data-model.md#gap-notes)), so **no response is actually serialized today**. The reconciliation — adding `json` tags or a dedicated response DTO so the emitted contract matches the camelCase examples, and adding the `PasswordHash` exclusion — is **Designed** work. Each resource page repeats this note in brief and its `openapi.yaml` schemas are annotated accordingly. `Source: backend/internal/db/schema.go:L39,L53,L65`.
 

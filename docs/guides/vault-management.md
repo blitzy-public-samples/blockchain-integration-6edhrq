@@ -8,7 +8,7 @@ For the raw endpoint contract, see [Vaults API Reference](../api-reference/vault
 
 ## Overview
 
-A vault ties an organization to a blockchain address for a given chain. The vault service is coded with three operations: create, get-by-id, and list-by-organization `Source: backend/internal/core/vault/service.go:L24,L46,L50`. **Tenant isolation is Designed, not enforced (F9-TENANCY-001).** `ListVaults` passes an `organizationID` to `repo.GetVaultsByOrganizationID` in source `Source: backend/internal/core/vault/service.go:L50-L51`, but no runnable boundary scopes callers to their own organization: the `db.Repository` type does not exist, no authentication middleware injects the caller's organization, and the package does not compile (see Build blockers below). The "callers see only their own organization" behavior is therefore a Designed target, tracked in [Scaffold vs Design](../architecture/scaffold-vs-design.md).
+A vault ties an organization to a blockchain address for a given chain. The vault service is coded with three operations: create, get-by-id, and list-by-organization `Source: backend/internal/core/vault/service.go:L24,L46,L50`. **Tenant isolation is Designed, not enforced.** `ListVaults` passes an `organizationID` to `repo.GetVaultsByOrganizationID` in source `Source: backend/internal/core/vault/service.go:L50-L51`, but no runnable boundary scopes callers to their own organization: the `db.Repository` type does not exist, no authentication middleware injects the caller's organization, and the package does not compile (see Build blockers below). The "callers see only their own organization" behavior is therefore a Designed target, tracked as **Defect 5** (the absent-but-imported `internal/api/middleware` and `pkg/utils` packages, so nothing injects the caller's organization) and **Defect 6** (the undefined `db.Repository` and `GetVaultsByOrganizationID` symbols) in the [Scaffold vs Design defect catalog](../architecture/scaffold-vs-design.md#defect-catalog).
 
 ### VM-001 capability and status matrix
 
@@ -49,6 +49,8 @@ Vault management does not run today. Resolve these in roughly this order before 
 POST   /vault/create
 GET    /vault/list
 GET    /vault/:id
+PUT    /vault/:id
+DELETE /vault/:id
 ```
 
 There is no `/api/v1` prefix in the router `Source: backend/internal/api/routes.go:L9-L54`. See [Vaults API Reference](../api-reference/vaults.md) for full request and response schemas.

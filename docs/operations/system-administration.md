@@ -3,7 +3,18 @@
 This guide is the consolidated **system-administration manual** for the Blockchain
 Integration Service and Dashboard. It fulfills the Software Project Proposal's
 User-Manuals deliverable, which lists a *System administration guide* as an
-explicit artifact. `Source: documentation/Software Project Proposal.md` (DELIVERABLES, item 6 — "System administration guide").
+explicit artifact. `Source: documentation/Software Project Proposal.md:L401-L402` (DELIVERABLES, item 6 — "System administration guide").
+
+**Provenance (documentation-set bookkeeping).** This page is mandated by the Agent
+Action Plan's requirement to fulfill the project's own committed documentation
+deliverables — which restates the Proposal's user-manuals commitment (AAP §0.1.1,
+§0.11.2) — and it falls inside the in-scope path `docs/operations/**/*` (AAP §0.8.1).
+It is nonetheless **not enumerated as a row** in the AAP §0.5.1 file-transformation
+map, so a plan-versus-delivered path diff reports it as an extra. That is a map
+omission in the frozen plan rather than an unplanned addition here, so the
+traceability is recorded at the artifact instead. The companion
+[Training Materials](../training/training-materials.md) page carries the same
+provenance against DELIVERABLES item 10.
 
 It is written for the operators, DevOps engineers, and system administrators the
 SRS names as a primary audience. `Source: documentation/Software Requirements Specifications (SRS).md:L21` It gathers the operational surface of the platform — configuration,
@@ -47,17 +58,26 @@ operate today against the Designed administration surface.
 
 ```mermaid
 flowchart TD
+    %% Cluster-caption budget: Mermaid wraps a subgraph caption on its own internal
+    %% ~200px band (the inner div carries max-width:200px) which flowchart.wrappingWidth
+    %% does NOT widen, and it reserves only ONE caption line before the first child row.
+    %% Measured in Mermaid 11.4.0: clearance = 13.5 - 24 x (lines - 1) user units, so a
+    %% two-line caption already paints over the first node. Browser-measured on a 20px
+    %% sans ramp as well: a 17-character caption stays on one line, 21 characters wrap.
+    %% Keep every caption to ONE line -- at most ~17 characters and no em dash. The
+    %% detail these captions used to carry is stated in the legend keys and in the
+    %% cited prose around this figure.
     subgraph Legend_SA1["Legend"]
         L1["Solid box = exists and validly applies today"]
         L2["Dashed box = Designed / absent or non-applying today"]
     end
 
-    subgraph Current["Current — operable today"]
+    subgraph Current["Current"]
         DOCS["Documentation set (docs/ tree) — Provisioned"]
         CI["CI workflow files (.github/workflows) — Provisioned (do not pass)"]
     end
 
-    subgraph Designed["Designed — intended administration surface"]
+    subgraph Designed["Designed"]
         CFG["Runtime configuration (env vars, DSN, Redis, JWT)"]
         DEP["Deployment (ECS Fargate + ALB + RDS + ElastiCache)"]
         DBA["Database & cache administration"]

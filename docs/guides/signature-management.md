@@ -58,6 +58,8 @@ Signature management does not run today. Resolve these before any runtime behavi
 POST   /signatures/create
 GET    /signatures/list
 GET    /signatures/:id
+PUT    /signatures/:id
+DELETE /signatures/:id
 ```
 
 There is no `/api/v1` prefix in the router `Source: backend/internal/api/routes.go:L9-L54`. See [Signatures API Reference](../api-reference/signatures.md) for schemas.

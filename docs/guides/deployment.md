@@ -18,7 +18,16 @@ The target runtime is a single AWS region hosting a VPC with public and private 
 
 ```mermaid
 flowchart TD
-    subgraph Legend_O2["Legend (all boxes are Designed: config fails terraform validate)"]
+    %% Cluster-caption budget: Mermaid wraps a subgraph caption on its own internal
+    %% ~200px band (the inner div carries max-width:200px) which flowchart.wrappingWidth
+    %% does NOT widen, and it reserves only ONE caption line before the first child row.
+    %% Measured in Mermaid 11.4.0: clearance = 13.5 - 24 x (lines - 1) user units, so a
+    %% two-line caption already paints over the first node. Browser-measured on a 20px
+    %% sans ramp as well: a 17-character caption stays on one line, 21 characters wrap.
+    %% Keep every caption to ONE line -- at most ~17 characters and no em dash. The
+    %% detail these captions used to carry is stated in the legend keys and in the
+    %% cited prose around this figure.
+    subgraph Legend_O2["Legend"]
         LG1["Solid box = resource DECLARED in main.tf (declared-but-invalid)"]
         LG2["Dashed box = resource REFERENCED but NEVER declared (absent)"]
     end
@@ -42,7 +51,7 @@ flowchart TD
     SVC -.-> IAM["IAM role / CloudWatch logs (ABSENT)"]
 
     classDef absent stroke-dasharray: 5 5;
-    class TG,TD,SGPG,SNG,SGR,SGK,IAM absent;
+    class LG2,TG,TD,SGPG,SNG,SGR,SGK,IAM absent;
 
     %% Legend: solid box = resource DECLARED in main.tf (declared-but-invalid, fails terraform validate); dashed box + dashed edge = resource REFERENCED but never declared (absent; HUMAN ASSISTANCE NEEDED, main.tf L217-L227). No box is Provisioned or Implemented: the whole topology is Designed.
 ```
@@ -62,17 +71,40 @@ As shown in `Fig O2 - Deployment Topology`, the request path (Route53 -> ALB -> 
 **Build and release (source-present script; placeholder values; does not build as-is).** The `scripts/deploy.sh` script *attempts to* build two images, `myapp-frontend` `Source: scripts/deploy.sh:L8` and `myapp-backend` `Source: scripts/deploy.sh:L16`, tag and push them to an ECR repository placeholder `your-ecr-repo-url` `Source: scripts/deploy.sh:L9,L17`, then trigger rolling updates. In practice the first `docker build` aborts the script before any push or deployment (see Troubleshooting: "Deploy script build context"). The intended flow is:
 
 ```bash
+# CAUTION: these are LIVE, MUTATING commands against a real ECS cluster - not a dry run.
+# --force-new-deployment immediately starts a rolling replacement of EVERY running task
+# in the named service, even when the image tag is unchanged. Substitute the real cluster
+# and service names first, and run only against the environment you intend to redeploy.
 aws ecs update-service --cluster your-cluster-name --service frontend-service --force-new-deployment
 aws ecs update-service --cluster your-cluster-name --service backend-service --force-new-deployment
 ```
 
 These commands target `your-cluster-name` with two services, `frontend-service` and `backend-service`, using `--force-new-deployment` `Source: scripts/deploy.sh:L23-L24`.
 
+**What `--force-new-deployment` actually does (and why it needs care).** The flag exists because ECS will not otherwise redeploy when the task definition is unchanged; forcing it makes the service start a **new deployment that replaces every running task** so tasks pick up a newly pushed image behind the same tag - here `myapp-frontend:latest` and `myapp-backend:latest` `Source: scripts/deploy.sh:L8-L10,L16-L18`. Three consequences follow. First, it is not idempotent in effect: each invocation cycles the whole service's tasks, so a stray re-run is a real production event, not a no-op. Second, availability during the roll depends entirely on the service's deployment configuration and health checks - and neither Dockerfile declares a `HEALTHCHECK` (see "No container health check" below), so the orchestrator has no image-level signal that a replacement task is actually serving. Third, because both images are pushed as `:latest`, the tag alone does not identify what is deployed and there is no distinct tag to roll back to; pushing an immutable, uniquely-tagged image per release is the **Designed** remediation. Note also that these two commands are the tail of `scripts/deploy.sh`, which never reaches them - it aborts at the first `docker build` (see "Deploy script build context") - so running them by hand deploys whatever image the registry currently holds under `:latest`, which may not be the code you just built.
+
 **Placeholder reconciliation (Designed).** Before use, replace `your-ecr-repo-url` with the real ECR registry URI and `your-cluster-name` with the ECS cluster name defined by Terraform (`aws_ecs_cluster.main`) `Source: infrastructure/terraform/main.tf:L143`. Note the topology mismatch below: the script assumes two services, but Terraform declares one.
+
+**Script invocation (`bash scripts/deploy.sh`, never `./scripts/deploy.sh`).** `scripts/deploy.sh` is committed with mode `100644` rather than `100755`, so the executable bit is absent from the git index itself and is therefore missing in every fresh clone - this is not a local permissions artifact `Source: scripts/deploy.sh (git index mode 100644)`. Invoking it directly fails before any line executes: `./scripts/deploy.sh` exits **126** with `bash: ./scripts/deploy.sh: Permission denied`, so no build, push, or `update-service` call is attempted. The file does carry a `#!/bin/bash` shebang `Source: scripts/deploy.sh:L1` and is syntactically valid (`bash -n scripts/deploy.sh` exits **0**), so passing it to an interpreter as `bash scripts/deploy.sh` runs it correctly; only the `./` form is blocked. The same applies to `scripts/setup.sh`, as documented in [installation.md](../getting-started/installation.md#corrected-setup-replacing-scriptssetupsh). Restoring the bit (`chmod +x`, or `git update-index --chmod=+x`) is **Designed** - this deliverable does not modify the scripts or their modes. Note that a successful invocation still aborts at the first `docker build` for the separate reason documented under Troubleshooting ("Deploy script build context"), so `bash` invocation fixes *how* the script is launched, not whether it completes.
 
 ## Troubleshooting
 
 **Terraform configuration does not validate (`terraform validate` fails with 17 errors).** The configuration cannot be planned or applied as-is: running `terraform validate` against `infrastructure/terraform/` returns **17 errors** (exit 1), in three categories documented below. All are **Designed** gaps - documented here, not fixed.
+
+Reproduce this yourself with the three **read-only** commands below. They inspect the configuration without contacting AWS, without creating or modifying state, and without touching a single resource.
+
+```bash
+cd infrastructure/terraform
+terraform fmt -check                 # exit 3, prints "outputs.tf" - formatting drift, changes nothing
+terraform init -backend=false        # exit 0 - downloads the AWS provider only; skips backend/state setup
+terraform validate                   # exit 1 - prints the 17 errors broken down below
+```
+
+> **CAUTION - never run `terraform apply` or `terraform plan` against this configuration.** The three commands above are deliberately the read-only subset. `terraform plan` requires real AWS credentials and would begin resolving the data sources; `terraform apply` would attempt to create billable infrastructure and, because `skip_final_snapshot = true` is declared on the RDS instance (gap TF-6), sets up a destroy path with no final backup. The configuration does not validate in any case, so neither command can complete - but do not use it as a smoke test.
+
+Two notes on what these commands leave behind. First, `-backend=false` is what keeps the run stateless: it tells Terraform to skip backend initialization, so **no `terraform.tfstate` is written** (confirmed: absent after the run). Omit that flag and Terraform initializes the default *local* backend instead - see gap TF-11. Second, `terraform init` writes two untracked artifacts into `infrastructure/terraform/`: `.terraform.lock.hcl` and a `.terraform/` provider cache that is roughly **840 MB** for the AWS provider. Because the repository ships no `.gitignore`, both land in `git status` as untracked - delete them or stage by explicit path, as described in [installation.md](../getting-started/installation.md#generated-artifacts-and-the-absent-gitignore).
+
+The three error categories, and the exact counts `terraform validate` reports, are: **10** x `Reference to undeclared module`, **4** x `Reference to undeclared input variable`, and **3** x `Reference to undeclared resource` - 17 in total, detailed in turn below.
 
 *(1) Undeclared resources and a data source.* `main.tf` references a target group, task definition, several security groups, an ElastiCache subnet group, IAM/CloudWatch resources, and an availability-zones data source that are never defined `Source: infrastructure/terraform/main.tf:L217-L227` - including `aws_lb_target_group.web` (referenced at L161 and L200), `aws_ecs_task_definition.web` (referenced at L151), `aws_security_group.postgresql` (referenced at L101), `aws_elasticache_subnet_group.redis` (referenced at L115), `aws_security_group.redis` (referenced at L116), `aws_security_group.kafka` (referenced at L129), and the data source `data.aws_availability_zones.available` (referenced at L24 and L35, with no `data "aws_availability_zones"` block declared) `Source: infrastructure/terraform/main.tf:L24,L35,L101,L115,L116`. `terraform validate` surfaces three of these directly (`aws_security_group.postgresql` at L101, `aws_elasticache_subnet_group.redis` at L115, `aws_security_group.redis` at L116); the remainder become visible once earlier errors are resolved. These are marked HUMAN ASSISTANCE NEEDED and must be authored before apply.
 
@@ -87,6 +119,16 @@ These commands target `your-cluster-name` with two services, `frontend-service` 
 **No container health check.** Neither Dockerfile declares a `HEALTHCHECK` instruction `Source: infrastructure/docker/Dockerfile.backend:L20`, `Source: infrastructure/docker/Dockerfile.frontend:L26`, so orchestrators cannot detect an unhealthy container from the image alone (**Designed**). This gap is tracked as failure mode FM-5 in the [Runbook](../operations/runbook.md), and the `/health` and `/ready` endpoints it should probe are **Designed** in the [Observability guide](../operations/observability.md).
 
 **Backend Go version and runtime currency.** The backend image pins `golang:1.17-alpine` `Source: infrastructure/docker/Dockerfile.backend:L2`, older than the Go 1.20 line used by CI; align these before building to avoid toolchain drift. Both container base pins - Go 1.17 (backend) and Node 14 (frontend) `Source: infrastructure/docker/Dockerfile.frontend:L2` - are also well past their upstream support windows and should be upgraded to currently-supported releases before a production build.
+
+**Base images are referenced by mutable tags, never by digest (builds are not reproducible).** All three `FROM` instructions in the repository name a tag only, and **zero** of them carry a `sha256:` digest `Source: infrastructure/docker/Dockerfile.backend:L2`, `Source: infrastructure/docker/Dockerfile.frontend:L2,L20`. Tags are mutable pointers that the upstream publisher can re-point at a new image at any time, so two builds of the same Dockerfile on different days can resolve different base layers - and therefore different OS packages and CVE exposure - with no change to the repository. The three references differ in how much they leave floating:
+
+| `FROM` reference | Where | What is pinned | What still floats |
+|------------------|-------|----------------|-------------------|
+| `golang:1.17-alpine` | `infrastructure/docker/Dockerfile.backend:L2` | Go minor line (1.17) and the Alpine base flavor | The patch release and the underlying Alpine version, plus every OS package in the layer |
+| `node:14 AS build` | `infrastructure/docker/Dockerfile.frontend:L2` | Node major line (14) only | Minor and patch releases and the entire base distribution |
+| `nginx:alpine` | `infrastructure/docker/Dockerfile.frontend:L20` | nothing version-related - **fully floating** | The complete nginx version and the Alpine base; this tag tracks whatever nginx currently ships as its Alpine build |
+
+`nginx:alpine` is the weakest of the three: it constrains no version at all, so the runtime web server in the frontend image is whatever upstream published most recently at build time. Pinning each base image by immutable digest (`FROM nginx:alpine@sha256:...`), with a documented refresh process so digests are updated deliberately rather than drifting silently, is the **Designed** remediation - documented here, not applied, since this deliverable does not modify the Dockerfiles. The same mutable-reference problem affects the CI workflows' `@vN` action tags and the `master`-branch golangci-lint installer, recorded as limitation 3 in [`../contributing/development.md`](../contributing/development.md#known-limitations) and in the [prerequisites](../getting-started/installation.md#prerequisites).
 
 **API Gateway is not provisioned.** The Technical Specification topology shows an Amazon API Gateway `Source: documentation/Technical Specifications.md:§INFRASTRUCTURE DIAGRAM`, but the code exposes the service through the ALB instead `Source: infrastructure/terraform/main.tf:L168-L174`; treat API Gateway as **Designed**, not deployed.
 
@@ -106,6 +148,8 @@ Beyond the 17 `terraform validate` errors, the declared resources - even once ma
 | TF-8 | **S3 buckets declared bare** (no SSE, versioning, or public-access block) | `aws_s3_bucket.data`/`.logs` with no encryption or access-block resources `Source: infrastructure/terraform/main.tf:L134-L140` | Objects unencrypted; no accidental-public-exposure guard; no version recovery | Add SSE (SSE-KMS), `aws_s3_bucket_public_access_block`, and versioning |
 | TF-9 | **No KMS, Secrets Manager, or HSM anywhere** | no such resources in `main.tf` `Source: infrastructure/terraform/main.tf:L1-L227` | Encryption keys and secrets are unmanaged | Introduce KMS CMKs and a secret store as the encryption/secret backbone |
 | TF-10 | **Legacy TLS policy on the HTTPS listener** | `ssl_policy = "ELBSecurityPolicy-2016-08"` `Source: infrastructure/terraform/main.tf:L195` | Permits TLS 1.0/1.1, below current baselines | Adopt a TLS 1.2+ policy (for example `ELBSecurityPolicy-TLS13-1-2-2021-06`) |
+| TF-11 | **No state backend declared**, so state defaults to a local, unencrypted, unlocked `terraform.tfstate` | zero `backend` blocks in any file `Source: infrastructure/terraform/main.tf (no backend block present)`, `Source: infrastructure/terraform/outputs.tf (no backend block present)`, `Source: infrastructure/terraform/variables.tf (no backend block present)` | **Amplifies TF-4.** Terraform records every resource attribute in state, so the RDS master password supplied through `var.postgres_password` is written into that plaintext file on the operator's disk - and, with no `.gitignore` in the repository, it sits untracked next to the configuration where a bulk `git add` can commit it. No locking also means two concurrent operators can corrupt state | Declare a remote backend with encryption and locking (for example S3 with SSE-KMS plus DynamoDB or S3 native locking), and source the password from Secrets Manager rather than a variable |
+| TF-12 | **No Terraform or provider version constraints** | zero `terraform {}` blocks anywhere, therefore no `required_version` and no `required_providers` `Source: infrastructure/terraform/ (no terraform{} block in main.tf, outputs.tf, or variables.tf)`; the provider is declared bare as `provider "aws" { region = var.aws_region }` `Source: infrastructure/terraform/main.tf:L4-L6`, and `.terraform.lock.hcl` is **not committed** `Source: infrastructure/terraform/ (tracked files: main.tf, outputs.tf, variables.tf only)` | Nothing in the repository pins either the CLI or the provider, so `terraform init` resolves whatever AWS provider is newest at that moment - a fresh init here selected **hashicorp/aws v6.56.0**. Two engineers initializing on different days can land on different provider majors and get divergent plans from identical code, and a new major can introduce breaking changes with no code change | Add a `terraform {}` block with `required_version` and a `required_providers` constraint on `hashicorp/aws` (for example `~> 6.0`), and commit `.terraform.lock.hcl` so provider selection is reproducible and checksum-verified |
 
 **Application data amplifies these gaps.** Two gaps above are especially consequential given what the application is designed to place in these stores. The unencrypted ElastiCache (TF-7) is the cache into which the settlement processor is coded to write the full `Signature` record — including the **sensitive** `RawSignature` — under `signature:<id>` for 24 hours `Source: backend/internal/tasks/signature_processor.go:L46-L52`, `Source: backend/internal/db/schema.go:L64`, so enabling at-rest and in-transit encryption (and minimizing that TTL) is required to protect cryptographic material, not merely a hardening nicety. Likewise, the absent Secrets Manager/KMS backbone (TF-9) is where the per-tenant API key — a **secret** that `Organization.APIKey` currently holds as a plaintext `string` `Source: backend/internal/db/schema.go:L15` — and the RDS master password (TF-4) must be stored and encrypted. The application-level handling contracts for these fields (hash/verifier and reveal-once for API keys; minimize, encrypt, and never-log for raw signatures) are defined in the [Security model](../security/security-model.md#secrets-and-key-management) and [`../architecture/data-model.md`](../architecture/data-model.md#sensitive--secret-fields); the Terraform gaps above are their infrastructure counterpart.
 

@@ -35,13 +35,26 @@
     require HTTP response headers and are the Designed hardening when this deck
     is served rather than opened from disk.
 
-    Subresource Integrity (SRI): the correct sha384 integrity= digests for the
-    four pinned CDN assets (reveal.js 5.1.0 reset.css + reveal.css + reveal.js,
-    lucide 0.460.0 umd, mermaid 11.4.0 esm) MUST be added to the <link>/<script>
-    tags below and to the ESM import once the digests can be verified against the
-    live CDN. They are intentionally omitted here because this deck was authored
-    offline: a guessed or stale integrity value would silently BREAK asset loading.
-    Add SRI + a matching hash-based CSP as the paired Designed hardening.
+    Subresource Integrity (SRI, F25-SRI-001): IMPLEMENTED. All five pinned CDN
+    assets carry a real sha384 digest, each computed from the live jsdelivr
+    response for its exact immutable version-pinned URL:
+      * reveal.js 5.1.0 reset.css  - <link> in this <head>
+      * reveal.js 5.1.0 reveal.css - <link> in this <head>
+      * reveal.js 5.1.0 reveal.js  - <script> before </body>
+      * lucide 0.460.0 umd         - <script> before </body>
+      * mermaid 11.4.0 esm         - via the <script type="importmap"> integrity
+                                     map, the only mechanism that can attach a
+                                     digest to an ES module URL
+    Each carries crossorigin="anonymous", which the integrity check requires and
+    which jsdelivr supports (it returns permissive CORS headers). SRI validates the
+    DECODED bytes, so transport compression does not affect the digest.
+    Two subresources remain uncovered for structural reasons, not by omission:
+      * The Google Fonts stylesheet is generated per user-agent, so its bytes vary
+        between clients and no single digest can be valid for all of them. SRI is
+        inexpressible; the exposure is bounded to typography by style-src/font-src.
+      * Mermaid's lazily-imported sub-chunks are resolved by the module graph at
+        runtime and are not enumerable ahead of time; import-map integrity covers
+        only the top-level module URL. Their origin is still pinned by script-src.
     ==========================================================================
   -->
   <meta http-equiv="Content-Security-Policy"
@@ -82,10 +95,20 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Fira+Code:wght@400;500&display=swap">
 
   <!-- reveal.js 5.1.0 core CSS (reset + framework). No prebuilt reveal theme — the Blitzy inline theme replaces it.
-       SRI: add integrity="sha384-…" crossorigin="anonymous" to both <link>s once the digests are verifiable online
-       (see the Content Security Policy note above; omitted offline to avoid a stale hash breaking the stylesheet). -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+       SUBRESOURCE INTEGRITY: every pinned jsdelivr asset carries a real sha384 digest computed from the live
+       response for its exact immutable version-pinned URL, together with crossorigin="anonymous" (required by
+       the integrity check and supported by jsdelivr's permissive CORS headers). SRI validates the DECODED
+       bytes, so transport compression does not affect the digest. Two subresources remain uncovered for
+       structural reasons rather than omission: the Google Fonts stylesheet is generated per user-agent so no
+       single digest can be valid for every client (the exposure is bounded to typography by style-src /
+       font-src), and Mermaid's lazily-imported sub-chunks are resolved by the module graph at runtime and are
+       not enumerable ahead of time (import-map integrity covers only the entry module). -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css"
+        integrity="sha384-AJKv9Ui5SfA0VsFksFI9GuA1ztX9Ca3CLP6HGfX4YY/tYSVodC+PUszaQZFIlkuy"
+        crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css"
+        integrity="sha384-YgvgKeZJykuztG+iQPoZHNZENTFZvOcOJ/uRzmJTje6GHYN9zAw+y5rx/L8MQKA/"
+        crossorigin="anonymous">
 
   <!--
     ==========================================================================
@@ -125,18 +148,70 @@
     /* -----------------------------------------------------------------------
      * 2. Base reveal.js surfaces — default (content) slides
      * --------------------------------------------------------------------- */
-    .reveal-viewport { background: var(--blitzy-surface-0); }
-    /* F20-A11Y (nav-control contrast root cause): content slides keep the white viewport,
-       but on the dark title/divider/closing slides that white surface becomes a letterbox
-       the white nav arrows disappear against. Darken the viewport to navy whenever a dark
-       slide is present (live :has()), so the controls — and any residual letterbox bar at
-       non-16:9 sizes — sit on a dark ground (white arrow on navy = 16:1). Token-based;
-       reverts to the white surface on content slides automatically. */
-    .reveal-viewport:has(section.present.slide-title),
-    .reveal-viewport:has(section.present.slide-divider),
-    .reveal-viewport:has(section.present.slide-closing) {
-      background: var(--blitzy-primary-navy);
+    /* The viewport is the neutral fallback ground only. Every slide declares its own
+       ground through reveal.js's per-slide background system (data-background-color /
+       data-background-gradient on each <section>), so the viewport colour is visible only
+       before the first background syncs. */
+    /* W003 F42-PERF-001 — eliminate the white holding frame on a cold load.
+       `.reveal .slides > section` ships `display: none` and only the `.present` section is
+       promoted, and that class is assigned by reveal.js at runtime, so no stylesheet change
+       can make slide content paint before the script runs. What IS remediable is the colour
+       of the holding frame: painting the brand navy from the very first frame replaces
+       ~3.8s of pure white on a throttled cold load with a branded dark ground that hands
+       over to the dark title slide without a white flash. The rule self-retires the instant
+       reveal.js adds `html.reveal-full-page`, so the settled rendering is byte-identical,
+       and `@media screen` excludes print view (which never gets that class) so this cannot
+       contribute to a print-background defect. */
+    html,
+    body {
+      height: 100%;
+      margin: 0;
     }
+
+    /* F42-PERF-001 x F-CDN-019 interaction — the navy holding frame must retire when the
+       classic safety net promotes the deck into a plain scrolling document, not only when
+       reveal.js reports ready. The dark-slide rescue further down re-paints the title,
+       divider and closing grounds on the sections themselves, but the eleven content slides
+       declare data-background-color="#FFFFFF" and stay transparent, so while the navy was
+       still on the root their #2D1C77 headings and #333333 body text landed on navy at
+       1.20:1 and 1.30:1 — invisible. Retiring the holding frame on `reveal-unavailable` and
+       pinning the document ground to the surface token restores the intended 13.60:1 and
+       12.63:1, and costs the holding frame nothing: it only ever matters inside the 8s
+       window before the safety net fires. The two selectors are mutually exclusive, so
+       neither relies on source order, and a healthy load never carries either class. */
+    @media screen {
+      html:not(.reveal-full-page):not(.reveal-unavailable) { background: var(--blitzy-primary-navy); }
+      html.reveal-unavailable { background: var(--blitzy-surface-0); }
+    }
+
+    .reveal-viewport { background: var(--blitzy-surface-0); }
+
+    /* F-OVERVIEW-015 / F-SCROLLVIEW-008 — the letterbox paint that previously lived here as
+       three `.reveal-viewport:has(section.present.slide-*) { background: navy }` rules has
+       been RETIRED in favour of reveal.js's own per-slide background system. That single
+       decision produced four defects, because reveal SNAPSHOTS the computed viewport
+       background and re-uses it as a page ground in three of its four view modes:
+         - ?print-pdf  — printView.activate() copies getComputedStyle(viewport).background
+                         onto every `.pdf-page`. In print view reveal marks ALL 16 sections
+                         `.present`, so all three :has() selectors matched simultaneously,
+                         every exported page was painted navy, and the 11 transparent
+                         content slides rendered #2D1C77 headings on #1A105F at 1.20:1.
+         - Overview    — the navy viewport stayed behind transparent thumbnails, collapsing
+                         heading contrast 13.600:1 -> 1.203:1 and body 12.635:1 -> 1.295:1.
+         - Scroll view — ScrollView.activate() takes the same snapshot, but BEFORE any slide
+                         is `.present`, so the :has() rules did not match, every
+                         `.scroll-page` was painted white, and the dark title/closing slides
+                         floated inside white bands.
+         - Normal view — only here did the rule behave as intended.
+       A per-slide `.slide-background` is instead re-parented by reveal into each
+       `.pdf-page`, each `.scroll-page-content` and each overview grid cell, so ONE
+       declaration per slide is correct in all four modes. It also still covers the
+       letterbox: `.reveal .backgrounds` and `.reveal .slide-background` are both
+       `position:absolute; width:100%; height:100%` of `.reveal`, i.e. the whole viewport
+       rather than the scaled 16:9 slide box — so the F20-A11Y intent (no white letterbox
+       behind white nav arrows on dark slides) is fully preserved. The nav-arrow contrast
+       half of F20-A11Y is preserved verbatim by the `.reveal:has(section.present.slide-*)
+       .controls button` rules in section 8 below, which are deliberately KEPT. */
 
     .reveal {
       font-family: var(--ff-body);
@@ -154,6 +229,34 @@
       height: 100%;
       padding: 64px 96px;
       box-sizing: border-box;
+    }
+
+    /* W003 F35-TRANSITION-001 — remove the cross-fade from the slide move.
+       reveal.css transitions `opacity` over the same 800ms cubic-bezier(.26,.86,.44,.985)
+       as `transform`, so during every slide change BOTH the outgoing and the incoming
+       section are translucent and their ink composites with whatever shows through —
+       measured contrast collapsing to ~1.0:1 on every white<->dark move. Each section
+       here owns an opaque ground (declared per-slide via data-background-color /
+       data-background-gradient), so the fade buys nothing and only costs legibility.
+       Dropping `opacity` from the `.present` transition list makes the move a true
+       opaque push; `.past`/`.future` keep a ZERO-duration opacity change DELAYED to the
+       end of the move (0s linear 0.8s) so the resting `opacity: 0` reveal relies on is
+       still reached — a flat `opacity: 1` would send up to 14 sections flying across the
+       canvas on a single backwards jump. `:not(.overview):not(.overview-deactivating)`
+       preserves reveal's own `transition: none` in overview mode. Print view, overview
+       and scroll view each force `opacity: 1 !important`, so this is presentation-view
+       only and cannot affect ?print-pdf. */
+    .reveal.slide:not(.overview):not(.overview-deactivating) .slides > section.present {
+      transition: transform 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985),
+                  transform-origin 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985),
+                  visibility 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985);
+    }
+    .reveal.slide:not(.overview):not(.overview-deactivating) .slides > section.past,
+    .reveal.slide:not(.overview):not(.overview-deactivating) .slides > section.future {
+      transition: transform 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985),
+                  transform-origin 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985),
+                  visibility 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985),
+                  opacity 0s linear 0.8s;
     }
 
     .reveal h1,
@@ -175,11 +278,28 @@
 
     .reveal p { line-height: 1.42; }
 
-    .reveal a { color: var(--blitzy-primary); text-decoration: none; }
-    .reveal a:hover { color: var(--blitzy-primary-deep); text-decoration: underline; }
+    /* F-HELP-016 (same leak class as the table rules in section 6): scoped to
+       `.reveal .slides section a`, NOT `.reveal a`. reveal.js injects its keyboard-shortcut
+       overlay as `.reveal > .overlay.overlay-help > header > a.close`, i.e. INSIDE `.reveal`
+       but OUTSIDE `.slides`, so the broader selector repainted reveal's own close control
+       with var(--blitzy-primary). That was cosmetically inert — the control draws its glyph
+       from a base64 background-image, so the inherited color never painted — but it is the
+       identical stylesheet leak the table rules were narrowed to stop, so it is closed the
+       same way rather than left as a latent override. Narrowing costs nothing: the slide
+       body contains no anchors at all, and any authored in-slide link still receives the
+       full brand treatment. The descendant combinator is deliberate — reveal re-parents
+       sections into `.pdf-page` (print) and `.scroll-page-content` (scroll view), both of
+       which stay inside `.slides`, so a child combinator would drop the styling there. */
+    .reveal .slides section a { color: var(--blitzy-primary); text-decoration: none; }
+    .reveal .slides section a:hover { color: var(--blitzy-primary-deep); text-decoration: underline; }
 
     .reveal strong,
-    .reveal b { color: var(--blitzy-primary-dark); font-weight: 600; }
+    /* W003 F50-TYPO-001: the deck requests Inter 700 from Google Fonts but nothing
+       activated it, so the weight never rendered. Bold in-prose emphasis now uses the
+       requested face and gains the intended weight contrast. Mermaid labels are
+       insulated by the explicit font-weight:400 pin on `.reveal .mermaid svg .nodeLabel`
+       et al., so no diagram can reflow as a result of this change. */
+    .reveal b { color: var(--blitzy-primary-dark); font-weight: 700; }
 
     .reveal ul,
     .reveal ol { display: inline-block; margin-left: 0.4em; }
@@ -187,6 +307,19 @@
     .reveal li { margin-bottom: 0.45em; line-height: 1.35; }
 
     .reveal .slides section ul li::marker { color: var(--blitzy-primary); }
+
+    /* F-CONTRAST-023: --blitzy-primary (#5B39F3, relative luminance 0.1162) against the
+       closing slide's --blitzy-primary-navy ground (#1A105F, 0.0142) is only 2.59:1, below
+       the 3:1 that WCAG 2.1 requires of a non-text graphical indicator (1.4.11) and of the
+       list marker as small text (1.4.3). The bullet's own copy is unaffected - white on navy
+       measures 16.36:1 - so only the marker needed re-tokening. --blitzy-accent-teal
+       (#94FAD5, 0.7947) is the deck's established on-dark accent and reaches 13.17:1 on
+       navy, well clear of 3:1 and of the stricter 4.5:1 as well. Scoped to the dark
+       slide-types so bullets on the eleven light content slides keep the brand violet, and
+       expressed purely in AAP palette tokens - no token VALUE is altered. */
+    .reveal .slides section.slide-closing ul li::marker,
+    .reveal .slides section.slide-divider ul li::marker,
+    .reveal .slides section.slide-title ul li::marker { color: var(--blitzy-accent-teal); }
 
     .reveal ::selection {
       background: var(--blitzy-accent-teal);
@@ -197,14 +330,17 @@
      * 3. Slide-type classes — applied to reveal.js section elements
      * --------------------------------------------------------------------- */
 
-    /* 3.1 Title slide — hero gradient, white text, teal Fira Code eyebrow */
+    /* 3.1 Title slide — hero gradient, white text, teal Fira Code eyebrow.
+       The GROUND is declared per-slide on the <section> itself via
+       data-background-gradient="linear-gradient(68deg, #7A6DEC 15.56%, #5B39F3 62.74%,
+       #4101DB 84.44%)" (byte-identical to --gradient-hero) plus a literal-hex
+       data-background-color fallback. No `background` is set here: a section-level copy
+       would DOUBLE-PAINT, and because the section box and the page box differ in size in
+       print and scroll view, the two independently-scaled gradients meet in a visible seam
+       (the "title gradient floats inside a band" symptom). The reveal-managed
+       `.slide-background` is the single owner of the paint. */
     .reveal .slides section.slide-title {
-      background: var(--gradient-hero);
       color: var(--blitzy-text-invert);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: flex-start;
       text-align: left;
     }
     .reveal .slides section.slide-title h1,
@@ -220,15 +356,14 @@
        The token value is unchanged; only its use context (opacity) is corrected. */
     .reveal .slides section.slide-title p { color: var(--blitzy-text-invert); }
 
-    /* 3.2 Section divider — dark purple / gradient, centered title + hero icon */
+    /* 3.2 Section divider — dark purple / gradient, centered title + hero icon.
+       Ground declared per-slide on the <section> via
+       data-background-gradient="linear-gradient(135deg, #2D1C77 0%, #5B39F3 100%)"
+       (byte-identical to --gradient-divider) over data-background-color="#2D1C77"
+       (byte-identical to --blitzy-primary-dark, and the AAP's stated flat-colour
+       alternative). See the note on .slide-title for why no `background` is set here. */
     .reveal .slides section.slide-divider {
-      background: var(--blitzy-primary-dark);
-      background: var(--gradient-divider);
       color: var(--blitzy-text-invert);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
       text-align: center;
     }
     .reveal .slides section.slide-divider h1,
@@ -237,14 +372,12 @@
       color: var(--blitzy-text-invert);
     }
 
-    /* 3.3 Closing slide — navy background, short takeaway, brand lockup + bar */
+    /* 3.3 Closing slide — navy background, short takeaway, brand lockup + bar.
+       Ground declared per-slide on the <section> via data-background-color="#1A105F"
+       (byte-identical to --blitzy-primary-navy). See the note on .slide-title for why no
+       `background` is set here. */
     .reveal .slides section.slide-closing {
-      background: var(--blitzy-primary-navy);
       color: var(--blitzy-text-invert);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: flex-start;
       text-align: left;
     }
     .reveal .slides section.slide-closing h1,
@@ -256,6 +389,33 @@
        on the navy closing ground is 16.36:1. Token value unchanged; opacity removed. */
     .reveal .slides section.slide-closing p,
     .reveal .slides section.slide-closing li { color: var(--blitzy-text-invert); }
+
+    /* 3.4 Vertical centring for the title / divider / closing slide types.
+       W003 F29-CENTRE-001: `display: flex` declared on the <section> itself is INERT —
+       reveal.js writes an inline `display` onto every section as it enters and leaves the
+       view distance, and an inline declaration beats any stylesheet rule short of
+       `!important`. The measured result was 47% / 74% / 55% of vertical void on the five
+       non-default slides. Rather than fight reveal with `!important` (which would also
+       break its show/hide contract), the deck owns an inner `div.slide-body` wrapper that
+       reveal never touches: it is the flex container, and `min-height: 100%` lets it fill
+       the section so `justify-content: center` has a box to centre within. Verified
+       content/box ratios of 1.000061 / 1.052892 / 1.000047, and it survives ?print-pdf. */
+    .reveal .slides section > .slide-body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 100%;
+    }
+    /* Components that are inline-level by design must keep their shrink-to-fit box once
+       they become flex items, or the eyebrow's chip background, the 160px accent bar and
+       the brand lockup would each stretch across the full content width. */
+    .reveal .slide-body > .hero-icon,
+    .reveal .slide-body > .eyebrow,
+    .reveal .slide-body > .accent-bar,
+    .reveal .slide-body > .brand-lockup { align-self: flex-start; }
+    .reveal .slide-divider .slide-body > .hero-icon,
+    .reveal .slide-divider .slide-body > .eyebrow,
+    .reveal .slide-divider .slide-body > .accent-bar { align-self: center; }
 
     /* -----------------------------------------------------------------------
      * 4. Component classes
@@ -297,10 +457,21 @@
       margin: 0.6em 0;
     }
 
-    /* 4.3 KPI grid + cards */
+    /* 4.3 KPI grid + cards
+       F-KPI-006 / P6-NEW-2: the column count is EXPLICIT rather than `auto-fit` with a
+       `minmax()` floor. `auto-fit` resolves against the 1920px canvas, never against the
+       window, because reveal.js renders the canvas at full size and then scales it with a
+       CSS transform - so the "responsive" track list always collapsed to a single row of
+       six cards no matter how narrow the viewport, and at 375x812 that row rendered as six
+       52.9x54.2px tiles that overlapped the citation line. It also let the sixth card sit
+       flush against the canvas edge, clipping its right rounded corner in the PDF export.
+       Three fixed columns give the six cards a stable 3x2 arrangement at every scale and
+       in every view mode, and `minmax(0, 1fr)` (rather than a bare `1fr`, whose implicit
+       `auto` minimum is min-content) guarantees the tracks can always shrink to fit their
+       container, so the grid can never overflow the slide's content box. */
     .reveal .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 28px;
       width: 100%;
       margin-top: 0.6em;
@@ -364,6 +535,33 @@
       stroke-width: 1.5;
     }
 
+    /* W003 F31-CLS-001 / F32-DEGRADE-001 — reserve the icon box BEFORE hydration.
+       lucide.createIcons() replaces each `<i data-lucide="…">` placeholder with an <svg>.
+       Until that runs the <i> is an empty inline element with NO intrinsic size, so every
+       icon box measured 0x0: the load produced two layout shifts (CLS 0.0571) and, under a
+       Lucide outage, the .icon-row collapsed 80.7px -> 28.7px and pulled its labels up by
+       52px, orphaning four words. Because [data-lucide] is display:inline-flex it is an
+       atomic inline-level box, so width/height apply in every context. Each rule mirrors
+       its sibling `svg` rule value-for-value, which makes hydration a like-for-like swap:
+       the box is identical before and after, so nothing reflows and nothing disappears. */
+    .reveal [data-lucide] {
+      display: inline-flex;
+      vertical-align: middle;
+      width: 1em;
+      height: 1em;
+      flex: 0 0 auto;
+    }
+    .reveal .hero-icon [data-lucide] { width: 96px; height: 96px; }
+    .reveal .icon-row [data-lucide] { width: 52px; height: 52px; }
+    .reveal .kpi-icon [data-lucide] { width: 40px; height: 40px; }
+    .reveal .value-card [data-lucide] { width: 30px; height: 30px; }
+    .reveal .brand-lockup [data-lucide] { width: 28px; height: 28px; }
+    .reveal .h2-icon[data-lucide] { width: 1em; height: 1em; }
+    /* The two icon wrappers that are not already flex containers must become inline-flex
+       so the reserved placeholder box participates in layout identically to the <svg>. */
+    .reveal .kpi-icon,
+    .reveal .hero-icon { display: inline-flex; align-items: center; }
+
     /* 4.6 Icon row — horizontal flex row of Lucide icons + labels */
     .reveal .icon-row {
       display: flex;
@@ -397,9 +595,6 @@
     .reveal .slide-divider .icon-row > *,
     .reveal .slide-closing .icon-row > * { color: rgba(255, 255, 255, 0.82); }
 
-    /* Generic Lucide icon alignment helper */
-    .reveal [data-lucide] { display: inline-flex; vertical-align: middle; }
-
     /* -----------------------------------------------------------------------
      * 5. Mermaid diagram container — centered, sized to fit 1920x1080, on-brand card
      * --------------------------------------------------------------------- */
@@ -408,51 +603,157 @@
       justify-content: center;
       align-items: center;
       max-width: 100%;
-      max-height: 760px;
+      /* Height budget: the tallest diagram slide places the card at y~281 (eyebrow + h2 +
+       * a 3-line figure caption) inside a 1080px canvas whose content box ends at
+       * y=1016, less the card's 0.4em bottom margin => ~721px of room. 700px (card) and
+       * 660px (svg, + 2x16px card padding = 692px) both fit with headroom, and keep the
+       * card clear of the absolutely-positioned citation line. */
+      max-height: 700px;
       margin: 0.4em auto;
-      padding: 28px;
+      padding: 16px;
       overflow: hidden;
       background: var(--blitzy-surface-2);
       border: 1px solid var(--blitzy-border-soft);
       border-radius: 16px;
     }
+    /* F-MERM-012: before Mermaid replaces the <pre> content with an <svg>, the element
+     * still holds the raw diagram DSL, which the deck's 34px body type paints as
+     * pre-formatted text thousands of pixels wide (worst case ~5,189px of text inside a
+     * 1920px page). Keep it invisible until Mermaid stamps data-processed="true".
+     * visibility:hidden — NOT display:none or font-size:0 — is required, because Mermaid
+     * must still be able to lay the container out in order to measure into it. */
+    .reveal .mermaid:not([data-processed="true"]) {
+      visibility: hidden;
+    }
+    /* F-CDN-019 (graceful degradation, part 1 of 2) — the pinned Mermaid ES module could
+     * not be fetched at all, so no diagram can ever be drawn. The guard above already
+     * stops the raw DSL from painting, but on its own it leaves a 700px empty card in the
+     * middle of the slide. Collapsing the card and letting the init module insert a short
+     * on-brand note in its place keeps the slide's heading, figure caption and citation in
+     * their normal positions, so the slide still communicates. Specificity here is (0,3,1)
+     * against the guard's (0,3,0), so these two rules are order-independent. */
+    html.mermaid-unavailable .reveal .mermaid {
+      display: none;
+    }
+    .reveal .slides section .diagram-fallback {
+      display: block;
+      max-width: 1500px;
+      margin: 0.4em auto;
+      padding: 14px 22px;
+      font-family: var(--ff-body);
+      font-size: 0.58em;
+      /* --blitzy-text, not --blitzy-text-muted: #999999 fails WCAG AA at this size on the
+         light content surface (same finding as the figure caption, F11-A11Y-001). */
+      color: var(--blitzy-text);
+      background: var(--blitzy-surface-1);
+      border: 1px dashed var(--blitzy-border-soft);
+      border-radius: 16px;
+      text-align: center;
+    }
+    /* F-CDN-019 (graceful degradation, part 2 of 2) — the reveal.js *stylesheet* hides
+     * every slide by default (`.reveal .slides>section{display:none}`) and only ever
+     * un-hides the one carrying `.present`, which nothing but Reveal.initialize() can
+     * assign. So any failure that prevents initialize() from running — a blocked
+     * reveal.js bundle, or (before this remediation) one unreachable Mermaid module
+     * aborting the whole ES module — leaves reveal.css loaded and every section
+     * display:none: a totally blank viewport, strictly worse than a full CDN outage.
+     * The classic inline script at the end of <body> stamps `reveal-unavailable` on <html>
+     * if the deck has still not reported ready, which promotes the slides back into normal
+     * document flow so all 16 remain readable as a plain scrolling document. Specificity
+     * (0,3,1) plus !important overrides reveal.css's (0,2,1) rule; the class is only ever
+     * applied when reveal has demonstrably failed, so healthy loads never see it. */
+    html.reveal-unavailable .reveal .slides > section {
+      display: block !important;
+      position: relative !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      transform: none !important;
+      height: auto !important;
+      min-height: 0;
+    }
+    html.reveal-unavailable .reveal .slides {
+      position: static;
+      height: auto;
+      pointer-events: auto;
+    }
+    /* F-CDN-019, part 3 — restore the dark-slide backdrops when reveal.js itself never
+     * initialises. On a healthy load the four dark slides take their ground from reveal's
+     * own per-slide `.slide-background` layer, driven by each section's
+     * data-background-color / data-background-gradient attributes, so the sections
+     * themselves are deliberately transparent. But reveal.js is what CREATES those
+     * background divs: under a total CDN outage the count is zero, which left the title,
+     * divider and closing slides keeping their light-on-dark text colours over the
+     * browser's default white canvas — measured at 1.243:1, i.e. invisible. These rules
+     * re-apply the SAME grounds directly to the sections, gated on html.reveal-unavailable
+     * so the healthy per-slide background system is never touched. The values are the
+     * shared AAP tokens, identical to the literals in the data-background-* attributes;
+     * `var()` is safe here because this is ordinary CSS, not the attribute path that
+     * reveal's own colorToRgb parser reads. */
+    html.reveal-unavailable .reveal .slides > section.slide-title {
+      background-color: var(--blitzy-primary);
+      background-image: var(--gradient-hero);
+    }
+    html.reveal-unavailable .reveal .slides > section.slide-divider {
+      background-color: var(--blitzy-primary-dark);
+      background-image: var(--gradient-divider);
+    }
+    html.reveal-unavailable .reveal .slides > section.slide-closing {
+      background-color: var(--blitzy-primary-navy);
+    }
     .reveal .mermaid svg {
       max-width: 100%;
-      max-height: 720px;
+      max-height: 660px;
       height: auto;
     }
-    /* Safeguard: pin the injected diagram's HTML-label typography to match exactly what
-     * Mermaid measured with (fontFamily = Inter, normal weight, normal letter-spacing).
-     * The deck's global .reveal type rules must NOT leak a heavier weight or letter
-     * spacing into the labels, or the rendered text would be wider than the measured
-     * box and clip. overflow:visible lets any sub-pixel remainder spill into the node
-     * rectangle's padding (the rect is ~30px wider than the label on each side) rather
-     * than being cropped at the foreignObject edge. */
+    /* F-MERM-007/008/009/010 — why diagram labels are native SVG <text>/<tspan> and not
+     * HTML inside a <foreignObject> (flowchart.htmlLabels = false, set in
+     * mermaid.initialize below). This is a correctness requirement, not a style choice.
+     * reveal.js CSS-scales the whole slide canvas (transform: scale(Reveal.getScale())).
+     * Mermaid's HTML-label path measures each label THROUGH that transformed DOM, so the
+     * foreignObject width attribute came out at (label offsetWidth x scale) while the
+     * label itself laid out at its unscaled width — every label ended up 1/scale too
+     * wide for its own box. Measured across a scale sweep: the computed viewBox width
+     * swung by up to 81% (Fig O1: 2945px at scale 1.0 -> 1623px at scale 0.4), 70 of 70
+     * nodes overflowed with up to 268px of overflow, and up to 49px of label text was
+     * hard-clipped at the SVG boundary. SVG text is measured with getBBox(), which
+     * reports untransformed user-space units, so layout is scale-invariant (measured
+     * drift <= 3.6px, < 0.19%, across scales 1.0 / 0.75 / 0.4) and both overflow and
+     * clipping fall to zero at every viewport.
+     * Only font-family and weight are pinned, to keep diagram type consistent with the
+     * deck's Inter body face. No white-space or overflow override is needed now that
+     * measurement and rendering share a single code path. */
+    .reveal .mermaid svg text,
     .reveal .mermaid svg .nodeLabel,
     .reveal .mermaid svg .edgeLabel,
-    .reveal .mermaid svg .cluster-label,
-    .reveal .mermaid svg foreignObject div,
-    .reveal .mermaid svg foreignObject span,
-    .reveal .mermaid svg foreignObject p {
+    .reveal .mermaid svg .cluster-label {
       font-family: 'Inter', system-ui, sans-serif;
       font-weight: 400;
       letter-spacing: normal;
-      white-space: nowrap;
-    }
-    .reveal .mermaid svg foreignObject {
-      overflow: visible;
     }
 
     /* -----------------------------------------------------------------------
      * 6. Styled tables — on-brand header + zebra rows for KPI/status tables
      * --------------------------------------------------------------------- */
-    .reveal table {
+    /* F-HELP-016: these rules are scoped to `.reveal .slides section table` rather than
+       `.reveal table`. reveal.js builds its keyboard-shortcut overlay as
+       `.reveal > .overlay.overlay-help > ... > table`, i.e. INSIDE `.reveal` but OUTSIDE
+       `.slides`, so the broader selector captured it and overrode reveal's own overlay
+       styling: the deck's `color: var(--blitzy-text)` (#333333) landed on the overlay's
+       rgba(0,0,0,0.95) ground for 1.614:1 (vs reveal's intended 20.396:1), and because
+       reveal emits bare <th> cells with no <tr>, implicit-<tr> fixup made the header
+       nth-child(1) and pushed the un-zebra'd rows onto the odd indices — leaving 6 of 12
+       shortcut rows unreadable. Narrowing the scope hands the overlay back to reveal's
+       stylesheet while every in-slide table keeps the full brand treatment. The descendant
+       combinator is deliberate: reveal re-parents sections into `.pdf-page` (print) and
+       `.scroll-page-content` (scroll view), both of which remain inside `.slides`, so a
+       child combinator would silently drop the styling in those two view modes. */
+    .reveal .slides section table {
       width: 100%;
       border-collapse: collapse;
       font-size: 0.62em;
       margin: 0.4em 0;
     }
-    .reveal table th {
+    .reveal .slides section table th {
       background: var(--blitzy-primary);
       color: var(--blitzy-text-invert);
       font-family: var(--ff-display);
@@ -460,12 +761,19 @@
       text-align: left;
       padding: 12px 18px;
     }
-    .reveal table td {
+    .reveal .slides section table td {
       padding: 10px 18px;
       border-bottom: 1px solid var(--blitzy-border);
       color: var(--blitzy-text);
     }
-    .reveal table tr:nth-child(even) td { background: var(--blitzy-surface-1); }
+    .reveal .slides section table tr:nth-child(even) td { background: var(--blitzy-surface-1); }
+
+    /* W003 F30-TABLE-001: an inline code chip carries a border and padding, so its line
+       box exceeds the row's line-height and the chip occluded the line above it. Scoped
+       with :has() to cells that actually contain a chip, so every other table in the deck
+       keeps its verified row rhythm. Scoped to `.reveal .slides section` with the rest of
+       section 6 so it cannot leak into reveal's own help overlay. */
+    .reveal .slides section table td:has(code) { line-height: 1.6; }
 
     /* -----------------------------------------------------------------------
      * 7. Inline code — Fira Code on a subtle surface (NO fenced code in slides)
@@ -506,9 +814,22 @@
       color: var(--blitzy-text-invert);
       margin: 0.1em 0 0.3em;
     }
+    /* F-CONTRAST-022: the audience-framing line is white on the AAP-mandated hero
+       gradient. Against the gradient's lightest stop (#7A6DEC, relative luminance
+       0.21129) pure white yields 4.02:1 - fine for WCAG large text (3:1) but short of
+       the 4.5:1 normal-text threshold, and at the previous 0.62em (21.08px canvas) it
+       did not qualify as large text. Contrast cannot be raised by changing the ink:
+       #FFFFFF is already maximal, and reaching 4.5:1 would require a background
+       luminance <= 0.1833, i.e. editing an AAP palette token - which AAP Section 0.10.2
+       forbids by mandating both this gradient and white text on the title slide.
+       The size is therefore what moves: 0.72em of the 34px slide base is 24.48px, past
+       WCAG's 24px (18pt) regular-weight large-text cutoff, so the line is evaluated at
+       3:1 and passes with margin at 4.02:1 - and at 6.32:1 over the gradient's mid stop,
+       which is what sits behind the text. No token, gradient or colour is altered.
+       (Its sibling .deck-subtitle already passed at 35.7px for the same reason.) */
     .reveal .slide-title .audience {
       font-family: var(--ff-body);
-      font-size: 0.62em;
+      font-size: 0.72em;
       color: var(--blitzy-text-invert);
       margin-top: 0.2em;
     }
@@ -622,21 +943,44 @@
        discipline used throughout the Markdown docs. Small Fira Code, pinned to the
        lower-left, --blitzy-text (#333333) for WCAG AA; the leading label is de-emphasised
        via letter-spacing/weight rather than a low-contrast colour. */
+    /* Citation line. Geometry is expressed entirely in CANVAS pixels so it inherits
+       reveal's uniform transform exactly like every other element on the slide.
+
+       F-SRCNOTE-001: left is 96px, not 0, so the citation shares the slide's content
+       gutter with its siblings (`.reveal .slides section` is padded `64px 96px`; an
+       absolutely-positioned child is laid out against the section's PADDING BOX, so
+       `left: 0` parked it 96px to the left of every heading, bullet and table).
+
+       F-SRCNOTE-009: `right: 256px` replaces `max-width: 96%` to reserve permanent
+       clearance for reveal's navigation chevrons. `aside.controls` is fixed 12px from
+       the viewport's bottom-right and is 46px wide, so in canvas space its left edge is
+       at 1920 - (46 + 12) / scale. The worst case while the controls are visible at all
+       is the 436px scroll-view activation floor (scale ~0.227), which projects to canvas
+       x >= 1664; below 435px reveal switches to scroll view and hides the controls
+       outright. Ending the citation at canvas x = 1664 therefore clears the chevrons at
+       every scale, leaving 1568px of run for the longest citation.
+
+       F-SRCNOTE-018: the two real-viewport @media rules that used to follow this block
+       were removed. Because reveal scales the whole 1920x1080 canvas with a CSS
+       transform, a `max-width` media query fires on the DEVICE width while the element
+       is being scaled by an unrelated factor - it made the citation the only piece of
+       type in the deck that changed size relative to its neighbours. At 0.44em of the
+       34px slide base the citation is ~14.96 canvas px, which sits alongside the 15px
+       Mermaid node labels, so a single scale-invariant size is both legible and
+       consistent (supersedes the @media half of F21-READABILITY; the 0.34em -> 0.44em
+       bump that made the text legible in the first place is retained). */
     .reveal .source-note {
       position: absolute;
-      left: 0;
+      left: 96px;
+      right: 256px;
       bottom: 0.6em;
       font-family: var(--ff-mono);
-      /* F21-READABILITY: bumped from 0.34em (~11.6px) to 0.44em (~15px) so citations
-         stay legible when the 1920x1080 canvas is scaled down for projection or a
-         narrow window; @media rules below enlarge it further at small widths. */
       font-size: 0.44em;
       font-weight: 400;
       letter-spacing: 0.01em;
       color: var(--blitzy-text);
       opacity: 1;
       margin: 0;
-      max-width: 96%;
       word-break: break-word;
     }
     .reveal .source-note .src-label {
@@ -651,6 +995,50 @@
     .reveal .slide-divider .source-note { color: rgba(255, 255, 255, 0.9); }
     .reveal .slide-closing .source-note .src-label,
     .reveal .slide-divider .source-note .src-label { color: var(--blitzy-accent-teal); }
+
+    /* P6-NEW-1 - PDF EXPORT CONTAINMENT.
+       In print view reveal.js moves each section into a `.pdf-page` wrapper that carries
+       `overflow: hidden`, forces the section to `position: absolute !important` and then
+       vertically centres it by assigning an inline top offset computed from the section's
+       CONTENT height:  top = max((pageHeight - section.scrollHeight) / 2, 0).
+       An absolutely-positioned child does not contribute to `scrollHeight`, so a citation
+       pinned to `bottom` was measured against the section BOX while the section box was
+       being pushed down the page by that centring offset - putting the citation entirely
+       below the printed page area on all 11 citation slides, where `overflow: hidden`
+       clipped it out of the exported PDF.
+       Making the citation a static, in-flow block for print only is what fixes it: the
+       note is then part of the very `scrollHeight` reveal centres, so it is guaranteed to
+       land inside the page whatever the slide's content height. Presentation view keeps
+       the absolute bottom-left pin, which is where the design wants it. */
+    html.reveal-print .reveal .source-note {
+      position: static;
+      left: auto;
+      right: auto;
+      bottom: auto;
+      display: block;
+      margin: 1.1em 0 0;
+    }
+
+    /* PDF EXPORT PAGE GEOMETRY (W003 F52/F54 + P6-NEW-4, resolved as one rule).
+       reveal.js's print controller re-parents each section into a `.pdf-page` wrapper and
+       then (a) writes a stale inline `top` computed from the section's scrollHeight BEFORE
+       re-parenting, which pushed content 66.5-385.5px down the page, and (b) forces
+       `padding: 0 !important` on the section, collapsing the deck's 64px/96px content
+       gutter to zero. Two defects followed from (b): outside-positioned list markers
+       resolved to a NEGATIVE x and were clipped out of the export by
+       `.pdf-page { overflow: hidden }`, and every line of body copy started hard against
+       the paper edge.
+       Pinning the section to the page origin and restoring the authored gutter fixes both
+       at the root: the printed page then has the same 64px/96px content band as the screen,
+       so the markers sit inside the page exactly as they do in presentation view (no
+       per-element padding shim needed) and the layout is identical on paper and on screen.
+       Combined with the static, in-flow `.source-note` above, every citation is part of the
+       very scrollHeight reveal measures, so nothing can land outside the page. */
+    html.reveal-print .reveal .slides .pdf-page > section {
+      top: 0 !important;
+      left: 0 !important;
+      padding: 64px 96px !important;
+    }
 
     /* F11-BRAND-002: inline Lucide icon inside an <h2>, replacing a one-off inline
        style so the treatment is reusable and theme-composed. */
@@ -672,6 +1060,52 @@
       outline-offset: 2px;
       box-shadow: 0 0 0 5px var(--blitzy-accent-teal);
       border-radius: 6px;
+    }
+
+    /* W003 F33-TARGET-001 / F43-TARGET-001 — WCAG 2.5.5 Target Size (44x44).
+       reveal.css sizes the chevrons from `.controls { font-size: 10px }` and a 3.6em box,
+       producing 36x36 against the 44x44 floor. Raising the cluster to 12.3px scales 3.6em
+       to 44.28px and scales the arrow glyph and every em-based offset with it, so the
+       controls stay bottom-right and stay perfectly centred inside their own box (a
+       width/height override would leave the glyph off-centre, because reveal positions the
+       bars from the box's top-left corner). reveal's pause-overlay "Resume presentation"
+       button is a separate element measuring 184.09x34 — wide enough, 10px short on
+       height; `min-height` plus an explicit border-box and a centring flex reaches the
+       floor without depending on the resolved line-height of whichever font actually
+       loads, so the target still holds when the font CDN is unavailable. Geometry only:
+       reveal's own colour, border and radius are untouched (its stock #CCCCCC label on the
+       #000000 pause ground already measures 13.08:1). Brand tokens only. */
+    .reveal .controls { font-size: 12.3px; }
+    .reveal .resume-button {
+      box-sizing: border-box;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* W003 F34-PROGRESS-001 / P7-D7 — the progress fill inherited a colour matching the
+       light content ground (1.00:1), so only the grey remainder was perceptible and the
+       indicator read BACKWARDS. The deep-violet token gives 9.32:1 against the white
+       surface and 5.81:1 against the track itself; the dark slide types keep the white
+       fill (already 9.17:1 there) through the same :has() scope the controls use below.
+       The bar is also clickable but had no affordance: reveal extends its 3px height with
+       a 10px `::after` (a 13px band against the 24px floor of WCAG 2.5.8) and the element
+       inherits `cursor: none` from hideInactiveCursor. A 21px extension brings the band to
+       exactly 24px and `cursor: pointer` makes the target discoverable. The citation line
+       is pinned at `bottom: 0.6em` with `right: 256px`, clear of the enlarged band. */
+    .reveal .progress {
+      color: var(--blitzy-primary-deep);
+      cursor: pointer;
+    }
+    .reveal .progress::after {
+      height: 21px;
+      top: -21px;
+    }
+    .reveal:has(section.present.slide-title) .progress,
+    .reveal:has(section.present.slide-divider) .progress,
+    .reveal:has(section.present.slide-closing) .progress {
+      color: var(--blitzy-text-invert);
     }
 
     /* F20-WCAG: reveal.js leaves the navigation-arrow glyphs a low-contrast grey that
@@ -699,22 +1133,58 @@
     .reveal:has(section.present.slide-closing) .controls button:disabled {
       color: var(--blitzy-text-muted);
     }
+    /* F-HOVER-009: the three :has() hover rules above only fire on the 4 dark slides; on the
+       11 light content slides reveal's own `.has-light-background .controls { color: #000 }`
+       applied to both the rest and hover states, so hovering produced no hue change at all
+       (only reveal's 0.9 -> 1 opacity step). This UNGATED rule gives every slide a visible
+       hover affordance: #000000 -> #5B39F3 is 6.32:1 against the white content ground, far
+       past the 3:1 non-text floor of WCAG 1.4.11. It is intentionally listed AFTER the dark
+       rules but carries lower specificity (0,2,1 vs the :has() rules' 0,3,2), so the dark
+       slides keep their #94FAD5 hover and only the light slides pick this up. Brand token
+       only; no token-value change. */
+    .reveal .controls button:hover {
+      color: var(--blitzy-primary);
+    }
 
     /* -----------------------------------------------------------------------
-     * F21-RESPONSIVE: reveal.js scales the 1920x1080 canvas uniformly, so on small
-     * windows/projectors the densest content and the smallest text shrink hardest.
-     * The KPI and value grids already reflow via auto-fit minmax(); these queries
-     * additionally enlarge the citation line and relax dense spacing so the deck
-     * stays legible at narrow widths. Brand tokens only; no token-value changes.
-     * ------------------------------------------------------------------------- */
-    @media (max-width: 1200px) {
-      .reveal .source-note { font-size: 0.52em; }
-      .reveal .icon-row { gap: 28px; }
-    }
-    @media (max-width: 800px) {
-      .reveal .source-note { font-size: 0.62em; }
-      .reveal table { font-size: 0.92em; }
-      .reveal .icon-row { gap: 18px; }
+     * 12. Motion preferences
+     * -------------------------------------------------------------------------
+     * F-SRCNOTE-018 (retires the earlier F21-RESPONSIVE device-width queries):
+     * this deck no longer contains ANY `max-width` media query. reveal.js renders a
+     * fixed 1920x1080 canvas and fits it to the window with a single uniform CSS
+     * transform, so a device-width query and the canvas coordinate system are two
+     * different measuring systems. Any rule gated on device width changed one
+     * element's size while every neighbour continued to scale with the canvas,
+     * which is precisely the inconsistency F-SRCNOTE-018 reported for the citation
+     * line (and which the same block also applied to `.icon-row` and table type).
+     * All sizing and spacing is now expressed once, in canvas units, so the deck is
+     * fully scale-invariant: what you compose at 1920x1080 is what renders at every
+     * window size, projector and print target.
+     *
+     * `prefers-reduced-motion`, by contrast, is a USER PREFERENCE query rather than a
+     * device-geometry query, so it is both appropriate and required here. The AAP
+     * (Section 0.10.2) mandates `transition: 'slide'` in the reveal.js config, and that
+     * config value is left untouched - the animation is neutralised in CSS instead, so
+     * the mandated configuration and the accessibility requirement are both satisfied.
+     * Covers reveal's slide track, the section transforms, the per-slide background
+     * cross-fade, the auto-animate layer and the control-chevron colour fades. */
+    @media (prefers-reduced-motion: reduce) {
+      .reveal .slides,
+      .reveal .slides section,
+      .reveal .slides > section,
+      .reveal .slides > section > section,
+      .reveal .backgrounds,
+      .reveal .backgrounds .slide-background,
+      .reveal .backgrounds .slide-background-content,
+      .reveal [data-auto-animate-target],
+      .reveal .progress span,
+      .reveal .controls button {
+        transition-duration: 1ms !important;
+        transition-delay: 0ms !important;
+        animation-duration: 1ms !important;
+        animation-delay: 0ms !important;
+        animation-iteration-count: 1 !important;
+      }
     }
   </style>
 </head>
@@ -723,18 +1193,157 @@
     <div class="slides">
 
       <!-- ================= SLIDE 1 — TITLE ================= -->
-      <section class="slide-title">
-        <span class="hero-icon" aria-hidden="true"><i data-lucide="boxes"></i></span>
-        <span class="eyebrow">Executive Summary</span>
-        <h1>Blockchain Integration Service &amp; Dashboard</h1>
-        <p class="deck-subtitle">Documentation of the custodial platform as it exists today</p>
-        <p class="audience">Prepared for leadership — no code literacy required</p>
-        <hr class="accent-bar">
-        <span class="brand-lockup"><i data-lucide="zap" aria-hidden="true"></i> Blitzy</span>
+      <section class="slide-title"
+               data-background-color="#5B39F3"
+               data-background-gradient="linear-gradient(68deg, #7A6DEC 15.56%, #5B39F3 62.74%, #4101DB 84.44%)">
+        <div class="slide-body">
+          <span class="hero-icon" aria-hidden="true"><i data-lucide="boxes" aria-hidden="true"></i></span>
+          <span class="eyebrow">Executive Summary</span>
+          <h1>Blockchain Integration Service &amp; Dashboard</h1>
+          <p class="deck-subtitle">Documentation of the custodial platform as it exists today</p>
+          <p class="audience">Prepared for leadership — no code literacy required</p>
+          <hr class="accent-bar">
+          <span class="brand-lockup"><i data-lucide="zap" aria-hidden="true"></i> Blitzy</span>
+        </div>
       </section>
 
-      <!-- ================= SLIDE 2 — WHAT WE DOCUMENTED ================= -->
-      <section>
+      <!-- ================= SLIDE 2 — BY THE NUMBERS (KPI GRID) ================= -->
+      <section data-background-color="#FFFFFF">
+        <span class="eyebrow">Headline Findings</span>
+        <h2>By the Numbers</h2>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-icon" aria-hidden="true"><i data-lucide="file-text" aria-hidden="true"></i></span>
+            <span class="kpi-value">62</span>
+            <span class="kpi-label">Repository files reviewed</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-icon" aria-hidden="true"><i data-lucide="network" aria-hidden="true"></i></span>
+            <span class="kpi-value">18</span>
+            <span class="kpi-label">REST endpoints documented</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-icon" aria-hidden="true"><i data-lucide="database" aria-hidden="true"></i></span>
+            <span class="kpi-value">5</span>
+            <span class="kpi-label">Core data entities</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-icon" aria-hidden="true"><i data-lucide="boxes" aria-hidden="true"></i></span>
+            <span class="kpi-value">5</span>
+            <span class="kpi-label">Product features</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-icon" aria-hidden="true"><i data-lucide="activity" aria-hidden="true"></i></span>
+            <span class="kpi-value">5</span>
+            <span class="kpi-label">Observability pillars</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-icon" aria-hidden="true"><i data-lucide="alert-triangle" aria-hidden="true"></i></span>
+            <span class="kpi-value">16</span>
+            <span class="kpi-label">Defects documented honestly</span>
+          </div>
+        </div>
+        <p class="source-note"><span class="src-label">Source</span>62 files: repository root; 18 endpoints: backend/internal/api/routes.go:L9-L54; 5 entities: backend/internal/db/schema.go:L11-L68; 5 features: SRS VM/SG/TP/UA/MA-001; 5 observability pillars: docs/operations/observability.md; 16 defects: docs/architecture/scaffold-vs-design.md</p>
+      </section>
+
+      <!-- ================= SLIDE 3 — CURRENT SCAFFOLD (Fig A1) ================= -->
+      <section data-background-color="#FFFFFF">
+        <span class="eyebrow">Before</span>
+        <h2>Current Scaffold — Source-Present, Not Buildable</h2>
+        <p class="fig-caption"><strong>Figure A1</strong> maps the backend as wired today: the request path
+          (router&nbsp;&rarr;&nbsp;services&nbsp;&rarr;&nbsp;database) is source-present but does not compile, while
+          dashed boxes mark packages that are imported but absent and the wiring that breaks startup — so nothing
+          runs today.</p>
+        <pre class="mermaid">
+flowchart TD
+    accTitle: Current backend scaffold, as wired today
+    accDescr: The request path from HTTP client to router to core services to the database is source-present but does not compile. Dashed boxes mark the packages imported but absent (config, logger, blockchain, custodian) and the task ticker that panics at startup; a dashed arrow marks the SetupRouter argument mismatch. Nothing runs today.
+    subgraph Legend_A1["Legend"]
+        direction TB
+        L1["Solid box = source-present package<br/>(does not compile)"]
+        L2["Dashed box = imported but ABSENT<br/>/ broken wiring"]
+        L1 ~~~ L2
+    end
+    Client["HTTP Client / Frontend"] --> Router["internal/api routes + handlers<br/>(source-present)"]
+    Router --> Core["internal/core: vault, transaction,<br/>signature (source-present)"]
+    Core --> DB["internal/db: postgres.go, redis.go,<br/>schema.go (source-present)"]
+    Main["cmd/server/main.go<br/>(composition root)"] -.->|"SetupRouter<br/>4 args vs 0 args"| Router
+    Main -.-> Cfg["internal/config<br/>(ABSENT)"]
+    Main -.-> Log["pkg/logger<br/>(ABSENT)"]
+    Main -.-> BC["internal/blockchain<br/>(ABSENT)"]
+    Main -.-> Cust["internal/custodian<br/>(ABSENT)"]
+    Core -.-> Tasks["internal/tasks tickers<br/>(panic: interval=0)"]
+    %% Dashed node outlines are the encoding the legend and the accDescr promise, and
+    %% AAP 0.4.3 fixes that vocabulary for Figure A1 ("Dashed box = imported but ABSENT
+    %% / broken wiring"). Mermaid emits a classDef declaration as an inline
+    %% "stroke-dasharray:6 4 !important" style on the node shape, which Chrome honours,
+    %% so the L2 legend key self-demonstrates the very treatment it names instead of
+    %% describing a treatment no box actually carries. Applied to the four absent
+    %% packages and to the ticker whose uninitialised interval breaks startup; the
+    %% SetupRouter mismatch stays a dashed ARROW because it is a wiring edge, not a box.
+    classDef absent stroke-dasharray:6 4
+    class L2,Cfg,Log,BC,Cust,Tasks absent
+        </pre>
+        <p class="source-note"><span class="src-label">Source</span>backend/cmd/server/main.go:L52; backend/internal/api/routes.go:L9</p>
+      </section>
+
+      <!-- ================= SLIDE 4 — DESIGNED TARGET (Fig A2) ================= -->
+      <section data-background-color="#FFFFFF">
+        <span class="eyebrow">After</span>
+        <h2>Designed Target Architecture</h2>
+        <p class="fig-caption"><strong>Figure A2</strong> shows the fully-wired target: it adds the configuration,
+          logging, blockchain, and custodian packages and corrects the router and settlement-ticker wiring.</p>
+        <pre class="mermaid">
+flowchart TD
+    accTitle: Designed target architecture, fully wired
+    accDescr: The designed target adds the currently-absent configuration, logging, blockchain and custodian packages, introduces ports for the blockchain and custodian clients plus a Kafka fan-out, and corrects the router and settlement-ticker wiring so the request path, core services, database and background tasks are all connected.
+    subgraph Legend_A2["Legend"]
+        direction TB
+        M1["Solid box = target component<br/>(fully wired)"]
+        M2["Solid arrow = runtime dependency"]
+        M1 ~~~ M2
+    end
+    Client["HTTP Client / Frontend"] --> Router["internal/api (router +<br/>middleware + correlation ID)"]
+    Router --> Core["internal/core services"]
+    Core --> Ports["Ports: BlockchainClient,<br/>CustodianClient"]
+    Ports --> BC["internal/blockchain<br/>(XRP, Ethereum)"]
+    Ports --> Cust["internal/custodian<br/>(Utxo Custodian)"]
+    Core --> DB["internal/db<br/>(PostgreSQL + Redis)"]
+    Core --> Tasks["internal/tasks<br/>(configured tickers)"]
+    Tasks --> Kafka["Kafka fan-out<br/>(designed)"]
+    Main["cmd/server/main.go"] --> Cfg["internal/config<br/>(Viper)"]
+    Main --> Log["pkg/logger<br/>(Logrus + correlation IDs)"]
+    Main --> Router
+        </pre>
+        <p class="source-note"><span class="src-label">Source</span>documentation/Technical Specifications.md &sect;HIGH-LEVEL ARCHITECTURE DIAGRAM (designed target)</p>
+      </section>
+
+      <!-- ================= SLIDE 5 — DIVIDER: ARCHITECTURE ================= -->
+      <!-- F-ORDER-016: AAP Section 0.10.2 fixes the slide-ordering convention as
+           Title -> headline findings / KPI summary -> architecture overview via Mermaid ->
+           alternating Section Dividers and Content slides -> Closing. The "Act One"
+           divider therefore sits AFTER the Figure A1 / Figure A2 before-and-after pair
+           (which the AAP places directly behind the KPI summary) and introduces the
+           architecture deep-dive that follows: scope, maturity status, and data model.
+           Fig A1 and Fig A2 remain adjacent so the before/after pair reads as one beat. -->
+      <section class="slide-divider"
+               data-background-color="#2D1C77"
+               data-background-gradient="linear-gradient(135deg, #2D1C77 0%, #5B39F3 100%)">
+        <div class="slide-body">
+          <span class="hero-icon" aria-hidden="true"><i data-lucide="network" aria-hidden="true"></i></span>
+          <span class="eyebrow">Act One</span>
+          <h2>Architecture</h2>
+          <!-- W003 F38-DEGRADE-002: under a Lucide outage this slide's hero icon is its ONLY
+               non-text visual, which would breach the AAP Section 0.10.2 "every slide carries at
+               least one non-text visual" contract. The accent bar is painted purely from gradient
+               tokens, so it survives that outage. Placed as the closing element of the content
+               block, matching the deck's existing motif. -->
+          <hr class="accent-bar">
+        </div>
+      </section>
+
+      <!-- ================= SLIDE 6 — WHAT WE DOCUMENTED ================= -->
+      <section data-background-color="#FFFFFF">
         <span class="eyebrow">Scope</span>
         <h2>What We Documented</h2>
         <ul>
@@ -748,128 +1357,31 @@
           <div><i data-lucide="shield" aria-hidden="true"></i><span>Security</span></div>
           <div><i data-lucide="activity" aria-hidden="true"></i><span>Observability</span></div>
         </div>
+        <!-- W003 F38-DEGRADE-002: under a Lucide outage the icon row on this slide degrades to
+             plain labels, leaving the slide with no non-text visual. The gradient accent bar is
+             CSS-only, so it holds the AAP Section 0.10.2 contract in that scenario. -->
+        <hr class="accent-bar">
         <p class="source-note"><span class="src-label">Source</span>repository root (62 files); documentation/</p>
       </section>
 
-      <!-- ================= SLIDE 3 — BY THE NUMBERS (KPI GRID) ================= -->
-      <section>
-        <span class="eyebrow">Headline Findings</span>
-        <h2>By the Numbers</h2>
-        <div class="kpi-grid">
-          <div class="kpi-card">
-            <span class="kpi-icon" aria-hidden="true"><i data-lucide="file-text"></i></span>
-            <span class="kpi-value">62</span>
-            <span class="kpi-label">Repository files reviewed</span>
-          </div>
-          <div class="kpi-card">
-            <span class="kpi-icon" aria-hidden="true"><i data-lucide="network"></i></span>
-            <span class="kpi-value">18</span>
-            <span class="kpi-label">REST endpoints documented</span>
-          </div>
-          <div class="kpi-card">
-            <span class="kpi-icon" aria-hidden="true"><i data-lucide="database"></i></span>
-            <span class="kpi-value">5</span>
-            <span class="kpi-label">Core data entities</span>
-          </div>
-          <div class="kpi-card">
-            <span class="kpi-icon" aria-hidden="true"><i data-lucide="boxes"></i></span>
-            <span class="kpi-value">5</span>
-            <span class="kpi-label">Product features</span>
-          </div>
-          <div class="kpi-card">
-            <span class="kpi-icon" aria-hidden="true"><i data-lucide="activity"></i></span>
-            <span class="kpi-value">5</span>
-            <span class="kpi-label">Observability pillars</span>
-          </div>
-          <div class="kpi-card">
-            <span class="kpi-icon" aria-hidden="true"><i data-lucide="alert-triangle"></i></span>
-            <span class="kpi-value">12</span>
-            <span class="kpi-label">Defects documented honestly</span>
-          </div>
-        </div>
-        <p class="source-note"><span class="src-label">Source</span>62 files: repository root; 18 endpoints: backend/internal/api/routes.go:L9-L54; 5 entities: backend/internal/db/schema.go:L11-L68; 5 features: SRS VM/SG/TP/UA/MA-001; 5 observability pillars: docs/operations/observability.md; 12 defects: docs/architecture/scaffold-vs-design.md</p>
-      </section>
-
-      <!-- ================= SLIDE 4 — DIVIDER: ARCHITECTURE ================= -->
-      <section class="slide-divider">
-        <span class="hero-icon" aria-hidden="true"><i data-lucide="network"></i></span>
-        <span class="eyebrow">Act One</span>
-        <h2>Architecture</h2>
-      </section>
-
-      <!-- ================= SLIDE 5 — CURRENT SCAFFOLD (Fig A1) ================= -->
-      <section>
-        <span class="eyebrow">Before</span>
-        <h2>Current Scaffold — Source-Present, Not Buildable</h2>
-        <p class="fig-caption"><strong>Figure A1</strong> maps the backend as wired today: the request path
-          (router&nbsp;&rarr;&nbsp;services&nbsp;&rarr;&nbsp;database) is source-present but does not compile, while
-          dashed boxes mark packages that are imported but absent and the wiring that breaks startup — so nothing
-          runs today.</p>
-        <pre class="mermaid">
-flowchart TD
-    accTitle: Current backend scaffold, as wired today
-    accDescr: The request path from HTTP client to router to core services to the database is source-present but does not compile. Dashed boxes mark packages imported but absent (config, logger, blockchain, custodian), the SetupRouter argument mismatch, and the task ticker that panics at startup, so nothing runs today.
-    subgraph Legend_A1["Legend"]
-        L1["Solid box = source-present package (does not compile)"]
-        L2["Dashed box = imported but ABSENT / broken wiring"]
-    end
-    Client["HTTP Client / Frontend"] --> Router["internal/api routes + handlers (source-present)"]
-    Router --> Core["internal/core: vault, transaction, signature (source-present)"]
-    Core --> DB["internal/db: postgres.go, redis.go, schema.go (source-present)"]
-    Main["cmd/server/main.go (composition root)"] -.->|"SetupRouter 4 args vs 0 args"| Router
-    Main -.-> Cfg["internal/config (ABSENT)"]
-    Main -.-> Log["pkg/logger (ABSENT)"]
-    Main -.-> BC["internal/blockchain (ABSENT)"]
-    Main -.-> Cust["internal/custodian (ABSENT)"]
-    Core -.-> Tasks["internal/tasks tickers (panic: interval=0)"]
-        </pre>
-        <p class="source-note"><span class="src-label">Source</span>backend/cmd/server/main.go:L52; backend/internal/api/routes.go:L9</p>
-      </section>
-
-      <!-- ================= SLIDE 6 — DESIGNED TARGET (Fig A2) ================= -->
-      <section>
-        <span class="eyebrow">After</span>
-        <h2>Designed Target Architecture</h2>
-        <p class="fig-caption"><strong>Figure A2</strong> shows the fully-wired target: it adds the configuration,
-          logging, blockchain, and custodian packages and corrects the router and settlement-ticker wiring.</p>
-        <pre class="mermaid">
-flowchart TD
-    accTitle: Designed target architecture, fully wired
-    accDescr: The designed target adds the currently-absent configuration, logging, blockchain and custodian packages, introduces ports for the blockchain and custodian clients plus a Kafka fan-out, and corrects the router and settlement-ticker wiring so the request path, core services, database and background tasks are all connected.
-    subgraph Legend_A2["Legend"]
-        M1["Solid box = target component (fully wired)"]
-        M2["Solid arrow = runtime dependency"]
-    end
-    Client["HTTP Client / Frontend"] --> Router["internal/api (router + middleware + correlation ID)"]
-    Router --> Core["internal/core services"]
-    Core --> Ports["Ports: BlockchainClient, CustodianClient"]
-    Ports --> BC["internal/blockchain (XRP, Ethereum)"]
-    Ports --> Cust["internal/custodian (Utxo Custodian)"]
-    Core --> DB["internal/db (PostgreSQL + Redis)"]
-    Core --> Tasks["internal/tasks (configured tickers)"]
-    Tasks --> Kafka["Kafka fan-out (designed)"]
-    Main["cmd/server/main.go"] --> Cfg["internal/config (Viper)"]
-    Main --> Log["pkg/logger (Logrus + correlation IDs)"]
-    Main --> Router
-        </pre>
-        <p class="source-note"><span class="src-label">Source</span>documentation/Technical Specifications.md &sect;5.1 (designed target)</p>
-      </section>
-
       <!-- ================= SLIDE 7 — WHAT'S REAL TODAY (STATUS TABLE) ================= -->
-      <section>
+      <section data-background-color="#FFFFFF">
         <span class="eyebrow">Honest Status</span>
         <h2>What's Real Today</h2>
-        <p class="fig-caption">Maturity is labelled honestly: <strong>Source-present</strong> means the code exists
-          but does not compile; <strong>Designed</strong> means planned and absent. Nothing runs today — the backend
-          has no build manifest and every package carries a compile-blocking defect.</p>
+        <p class="fig-caption">Three maturity labels are used throughout: <strong>Implemented</strong> —
+          here always qualified <em>non-buildable</em>, because the code exists but has no build manifest and does
+          not compile; <strong>Provisioned</strong> — declared in valid config but not deployed, which nothing
+          reaches today since <code>terraform validate</code> fails; and <strong>Designed</strong> — planned and
+          absent. Nothing runs today.</p>
         <table>
           <thead>
             <tr><th>Capability</th><th>Status</th></tr>
           </thead>
           <tbody>
-            <tr><td>REST routing &amp; request handlers</td><td><span class="pill pill-source">Source-present</span></td></tr>
-            <tr><td>Core services &amp; database layer</td><td><span class="pill pill-source">Source-present</span></td></tr>
-            <tr><td>Background settlement &amp; signature processors</td><td><span class="pill pill-source">Source-present</span></td></tr>
+            <tr><td>REST routing &amp; request handlers</td><td><span class="pill pill-source">Implemented (non-buildable)</span></td></tr>
+            <tr><td>Core services &amp; database layer</td><td><span class="pill pill-source">Implemented (non-buildable)</span></td></tr>
+            <tr><td>Background settlement &amp; signature processors</td><td><span class="pill pill-source">Implemented (non-buildable)</span></td></tr>
+            <tr><td>AWS topology declared in Terraform</td><td><span class="pill pill-designed">Designed</span></td></tr>
             <tr><td>Blockchain, custodian, config &amp; logging packages</td><td><span class="pill pill-designed">Designed</span></td></tr>
             <tr><td>Kafka event fan-out</td><td><span class="pill pill-designed">Designed</span></td></tr>
           </tbody>
@@ -878,9 +1390,9 @@ flowchart TD
       </section>
 
       <!-- ================= SLIDE 8 — DATA MODEL (TABLE) ================= -->
-      <section>
+      <section data-background-color="#FFFFFF">
         <span class="eyebrow">Data Model</span>
-        <h2><span class="kpi-icon h2-icon" aria-hidden="true"><i data-lucide="database"></i></span>The Domain in Five Entities</h2>
+        <h2><span class="kpi-icon h2-icon" aria-hidden="true"><i data-lucide="database" aria-hidden="true"></i></span>The Domain in Five Entities</h2>
         <table>
           <thead>
             <tr><th>Entity</th><th>Purpose</th><th>Key relationships (logical)</th></tr>
@@ -898,38 +1410,58 @@ flowchart TD
       </section>
 
       <!-- ================= SLIDE 9 — DIVIDER: PROCESSING & OPERATIONS ================= -->
-      <section class="slide-divider">
-        <span class="hero-icon" aria-hidden="true"><i data-lucide="workflow"></i></span>
-        <span class="eyebrow">Act Two</span>
-        <h2>Processing &amp; Operations</h2>
+      <section class="slide-divider"
+               data-background-color="#2D1C77"
+               data-background-gradient="linear-gradient(135deg, #2D1C77 0%, #5B39F3 100%)">
+        <div class="slide-body">
+          <span class="hero-icon" aria-hidden="true"><i data-lucide="workflow" aria-hidden="true"></i></span>
+          <span class="eyebrow">Act Two</span>
+          <h2>Processing &amp; Operations</h2>
+          <!-- W003 F38-DEGRADE-002: under a Lucide outage this slide's hero icon is its ONLY
+               non-text visual, which would breach the AAP Section 0.10.2 "every slide carries at
+               least one non-text visual" contract. The accent bar is painted purely from gradient
+               tokens, so it survives that outage. Placed as the closing element of the content
+               block, matching the deck's existing motif. -->
+          <hr class="accent-bar">
+        </div>
       </section>
 
       <!-- ================= SLIDE 10 — ASYNC SETTLEMENT (Fig-Async) ================= -->
-      <section>
+      <section data-background-color="#FFFFFF">
         <span class="eyebrow">Data Flow</span>
         <h2>How Transactions Settle</h2>
-        <p class="fig-caption">The <strong>asynchronous settlement flow</strong> splits fast request handling from
-          background settlement. The create path is source-present but does not compile, and the automatic settlement
-          step cannot run — it is blocked by an uninitialized-ticker panic the documentation flags for the team.</p>
+        <p class="fig-caption"><strong>Figure B2</strong> maps asynchronous settlement: fast request handling is split
+          from background settlement. Neither half runs today &mdash; the backend does not compile &mdash; and a latent
+          zero-interval ticker panic sits behind that build failure.</p>
         <pre class="mermaid">
 flowchart LR
-    accTitle: Designed asynchronous transaction settlement flow
-    accDescr: A create request persists a transaction as Pending; a background ticker processor is designed to update the status to Processed and cache it to Redis. This path is source-present but does not compile, and the ticker step is blocked today by an uninitialized-interval panic.
+    accTitle: Figure B2, designed asynchronous transaction settlement flow
+    accDescr: A create request persists a transaction as Pending; a background ticker processor is designed to update the status to Processed and cache it to Redis. Neither step runs today because the backend does not compile, so the create path is source-present but non-buildable; the dashed ticker, update and cache steps sit behind that build failure, where an uninitialized-interval panic waits as a latent defect reachable only once the build blockers are resolved.
     subgraph Legend_Async["Legend"]
-        LA1["Solid = source-present path (does not compile)"]
-        LA2["Dashed = blocked today (interval=0 panic)"]
+        direction TB
+        LA1["Solid = source-present path<br/>(does not compile)"]
+        LA2["Dashed = compile failure,<br/>panic latent"]
+        LA1 ~~~ LA2
     end
-    API["POST /transactions/create"] --> Save["Persist Transaction (status = Pending)"]
-    Save --> Queue["Awaiting settlement"]
-    Queue -.->|"ticker interval uninitialized"| Proc["Ticker processor (StartTransactionProcessor)"]
-    Proc --> Update["Update status = Processed"]
-    Update --> Cache["Cache to Redis (tx:&amp;lt;id&amp;gt;)"]
+    API["POST<br/>/transactions/create"] --> Save["Persist Transaction<br/>(status = Pending)"]
+    Save --> Queue["Awaiting<br/>settlement"]
+    Queue -.->|"build blocked;<br/>interval uninitialized"| Proc["Ticker processor<br/>(StartTransactionProcessor)"]
+    Proc -.-> Update["Update status<br/>= Processed"]
+    Update -.-> Cache["Cache to Redis<br/>(key tx:ID)"]
+    %% The LA2 key reads "Dashed = compile failure, panic latent", so every element behind
+    %% the build failure is drawn dashed -- the processor itself and the status-update and
+    %% cache steps it gates -- and the key self-demonstrates the treatment. API, Save and
+    %% Queue stay solid because they are the source-present create path the LA1 key
+    %% describes. The zero-interval ticker panic is latent BEHIND the build failure, not
+    %% the first-observable failure: nothing can panic until the module compiles.
+    classDef absent stroke-dasharray:6 4
+    class LA2,Proc,Update,Cache absent
         </pre>
-        <p class="source-note"><span class="src-label">Source</span>backend/internal/tasks/transaction_processor.go:L13-L16</p>
+        <p class="source-note"><span class="src-label">Source</span>backend/internal/tasks/transaction_processor.go:L10,L13-L16; backend/cmd/server/main.go:L6-L12 (build blockers); docs/operations/runbook.md (FM-1, FM-4)</p>
       </section>
 
       <!-- ================= SLIDE 11 — RISKS & MITIGATIONS (TABLE) ================= -->
-      <section>
+      <section data-background-color="#FFFFFF">
         <span class="eyebrow">Risk Posture</span>
         <h2>Known Gaps, Documented Honestly</h2>
         <table>
@@ -951,7 +1483,7 @@ flowchart LR
       </section>
 
       <!-- ================= SLIDE 12 — OBSERVABILITY (Fig O1) ================= -->
-      <section>
+      <section data-background-color="#FFFFFF">
         <span class="eyebrow">Operations</span>
         <h2>Observability: Reused vs. Added</h2>
         <p class="fig-caption"><strong>Figure O1</strong> contrasts the source-present emission points with the five
@@ -960,32 +1492,39 @@ flowchart LR
         <pre class="mermaid">
 flowchart LR
     accTitle: Observability, source-present today versus the designed target
-    accDescr: Today's observability is source-present emission code only that does not compile: Gin access logging, worker structured logs that depend on an absent pkg/logger, frontend console logs, and database liveness pings. The designed target adds correlation-ID middleware, distributed tracing, a metrics endpoint, health and readiness checks, log aggregation, alerting, and a dashboard template.
+    accDescr: Today's observability is source-present emission code only that does not compile: Gin access logging, worker structured logs that depend on an absent pkg/logger, frontend console logs, and database liveness pings. A dashed box marks the imported but absent pkg/logger, rounded boxes mark the designed additions, and a thick arrow marks the gaps the design closes. The designed target adds correlation-ID middleware, distributed tracing, a metrics endpoint, health and readiness checks, log aggregation, alerting, and a dashboard template.
+    %% Cluster captions wrap on Mermaid's own internal band, which is tighter here than
+    %% under stock config because this deck renders at 20px with htmlLabels:false. A
+    %% two-line caption lands in the marginal band that already produced a measured
+    %% +28.9px overlap in Fig O2, so both cluster captions stay to a single short word.
+    %% The maturity qualifiers they used to carry are stated three times on this slide
+    %% already: the four legend keys, the accDescr above, and the figure caption.
     subgraph Legend_O1["Legend"]
-        LG1["Solid box = source-present emission code (does not compile)"]
-        LG2["Dashed box = imported but ABSENT (does not compile)"]
-        LG3["Rounded box = Designed / added (absent today)"]
+        LG1["Solid box = source-present<br/>emission code<br/>(does not compile)"]
+        LG2["Dashed box = imported but<br/>ABSENT (does not compile)"]
+        LG3("Rounded box = Designed /<br/>added (absent today)")
+        LG4["Thick arrow = gap closed<br/>by the designed target"]
     end
-    subgraph Current["Current - Source-present (emission code, does not compile)"]
+    subgraph Current["Current"]
         direction TB
-        C_API["Gin router: gin.Logger() + gin.Recovery()"]
-        C_WORK["Task workers: logger.Error(...) structured logs"]
-        C_FE["Frontend: console.* logs"]
-        C_PING["Liveness: db.Ping() + redisClient.Ping(ctx)"]
-        C_LOGGER["pkg/logger (imported, ABSENT)"]
-        C_API -.->|"intended (does not run today)"| C_STDOUT["stdout / container logs (intended sink; nothing emits today)"]
-        C_WORK -.->|"intended (does not run today)"| C_STDOUT
+        C_API["Gin router: gin.Logger() +<br/>gin.Recovery()"]
+        C_WORK["Task workers:<br/>logger.Error(...)<br/>structured logs"]
+        C_FE["Frontend:<br/>console.* logs"]
+        C_PING["Liveness: db.Ping() +<br/>redisClient.Ping(ctx)"]
+        C_LOGGER["pkg/logger<br/>(imported, ABSENT)"]
+        C_API -.->|"intended (does<br/>not run today)"| C_STDOUT["stdout / container logs<br/>(intended sink; nothing<br/>emits today)"]
+        C_WORK -.->|"intended (does<br/>not run today)"| C_STDOUT
         C_WORK -.->|"depends on"| C_LOGGER
     end
-    subgraph Designed["Designed - Target (added, absent today)"]
+    subgraph Designed["Designed"]
         direction TB
-        D_MW(["Correlation-ID middleware"])
-        D_TRACE(["OpenTelemetry distributed tracing"])
-        D_METRICS(["/metrics endpoint (Prometheus)"])
-        D_HEALTH(["/health + /ready + Dockerfile HEALTHCHECK"])
-        D_AGG(["Log aggregation (CloudWatch / Loki)"])
-        D_ALERT(["Alerting: error rate, settlement lag, health"])
-        D_DASH(["Dashboard: dashboard-template.json"])
+        D_MW("Correlation-ID<br/>middleware")
+        D_TRACE("OpenTelemetry<br/>distributed tracing")
+        D_METRICS("/metrics endpoint<br/>(Prometheus)")
+        D_HEALTH("/health + /ready +<br/>Dockerfile HEALTHCHECK")
+        D_AGG("Log aggregation<br/>(CloudWatch / Loki)")
+        D_ALERT("Alerting: error rate,<br/>settlement lag, health")
+        D_DASH("Dashboard:<br/>dashboard-template.json")
         D_MW --> D_AGG
         D_TRACE --> D_DASH
         D_METRICS --> D_DASH
@@ -993,55 +1532,99 @@ flowchart LR
         D_AGG --> D_DASH
         D_DASH --> D_ALERT
     end
-    Current ==>|"gaps closed by design"| Designed
+    Current ==>|"gaps closed<br/>by design"| Designed
+    %% The "Designed" keys use rounded-rectangle geometry, not Mermaid's stadium
+    %% shape. Measured reason: a stadium sizes itself as (text height + 10) and
+    %% ignores flowchart.padding entirely, leaving a two-line label only ~10 user
+    %% units of vertical slack -- so a descender escaped the outline by 2.6 units
+    %% once font measurement quantised differently at a 0.2 canvas scale. A
+    %% rounded rectangle honours flowchart.padding and yields 18 units of slack
+    %% for the same label. classDef restores the pill silhouette the legend
+    %% promises ("Rounded box") via the CSS rx/ry geometry properties, so the
+    %% legend key stays visually self-demonstrating and clearly distinct from the
+    %% square source-present and dashed ABSENT keys.
+    classDef designed rx:26,ry:26
+    class LG3,D_MW,D_TRACE,D_METRICS,D_HEALTH,D_AGG,D_ALERT,D_DASH designed
+    %% pkg/logger is the one "imported but ABSENT" box in this figure, so it and the LG2
+    %% key that names the treatment both carry the dashed outline. LG4 documents the
+    %% thick "gaps closed by design" channel between the two clusters, which previously
+    %% appeared in the diagram with no legend entry at all.
+    classDef absent stroke-dasharray:6 4
+    class LG2,C_LOGGER absent
         </pre>
-        <p class="source-note"><span class="src-label">Source</span>backend/internal/api/routes.go; backend/internal/tasks/*; documentation/Technical Specifications.md &sect;6.5</p>
+        <p class="source-note"><span class="src-label">Source</span>backend/internal/api/routes.go; backend/internal/tasks/*; docs/operations/observability.md</p>
       </section>
 
       <!-- ================= SLIDE 13 — DEPLOYMENT TOPOLOGY (Fig O2) ================= -->
-      <section>
+      <section data-background-color="#FFFFFF">
         <span class="eyebrow">Where It Runs</span>
         <h2>Deployment Topology</h2>
         <p class="fig-caption"><strong>Figure O2</strong> shows the AWS target — ECS Fargate behind an ALB, with RDS
-          PostgreSQL, ElastiCache Redis, MSK Kafka, and S3. Dashed boxes are resources referenced but not yet defined.</p>
+          PostgreSQL, ElastiCache Redis, MSK Kafka, and S3. Nothing is deployable today: <code>terraform validate</code>
+          fails with 17 errors, so the whole topology stays Designed.</p>
         <pre class="mermaid">
 flowchart TD
     accTitle: Designed AWS deployment topology
-    accDescr: The designed AWS target routes internet traffic through Route53 and an ALB to an ECS Fargate service, backed by RDS PostgreSQL, ElastiCache Redis, MSK Kafka and S3. Solid boxes are resources defined in main.tf; dashed boxes are resources referenced but not yet defined, including target groups, task definitions, security groups and IAM roles.
+    accDescr: The designed AWS target routes internet traffic through Route53 and an ALB to an ECS Fargate service, backed by RDS PostgreSQL, ElastiCache Redis, MSK Kafka and S3. Solid boxes are resources declared in main.tf but invalid, because they depend on undeclared input variables; dashed boxes are resources referenced but never declared, including target groups, task definitions, security groups and IAM roles. terraform validate fails with 17 errors, so nothing is deployable and the whole topology is Designed.
+    %% Cluster captions wrap on Mermaid's own internal ~180px budget, which wrappingWidth
+    %% (360) does NOT widen, and every wrapped line steals ~24 user units from the band in
+    %% front of the first swatch. A longer caption here wrapped to FOUR lines and painted
+    %% over the first swatch (measured +28.9px overlap in Mermaid 11.4.0, clipping the tail
+    %% of the caption outright); a two-line caption still left only a 4.8px hairline.
+    %% Browser-measured on this deck's 20px Inter ramp: <=17 characters stays on ONE line
+    %% and clears the first swatch by 28.5px. Keep it to one line. The maturity fact it
+    %% used to carry is stated in full three times on this slide already -- the figure
+    %% caption, the accDescr above, and the source-note below -- so nothing is lost.
     subgraph Legend_O2["Legend"]
-        LG1["Solid box = resource DEFINED in main.tf"]
-        LG2["Dashed box = resource REFERENCED but NOT defined"]
+        direction TB
+        LG1["Solid box = resource DECLARED<br/>in main.tf (declared-but-invalid)"]
+        LG2["Dashed box = resource REFERENCED<br/>but NEVER declared (absent)"]
+        LG1 ~~~ LG2
     end
-    User["Internet Client / Browser"] --> R53["Route53 A record (alias to ALB)"]
-    R53 --> ALB["ALB aws_lb.main (internet-facing)"]
-    ALB --> LHTTP["Listener :80 (redirect 301 to :443)"]
-    ALB --> LHTTPS["Listener :443 (forward)"]
-    LHTTPS --> SVC["ECS Service 'web' (Fargate, port 80)"]
-    SVC --> CL["ECS Cluster aws_ecs_cluster.main"]
-    SVC --> RDS["RDS PostgreSQL (multi_az)"]
-    SVC --> REDIS["ElastiCache Redis (:6379)"]
-    SVC --> KAFKA["MSK Kafka cluster"]
-    SVC --> S3["S3 buckets (data + logs)"]
-    LHTTPS -.-> TG["aws_lb_target_group.web (ABSENT)"]
-    SVC -.-> TD["aws_ecs_task_definition.web (ABSENT)"]
-    RDS -.-> SGPG["aws_security_group.postgresql (ABSENT)"]
-    REDIS -.-> SNG["aws_elasticache_subnet_group.redis (ABSENT)"]
-    REDIS -.-> SGR["aws_security_group.redis (ABSENT)"]
-    KAFKA -.-> SGK["aws_security_group.kafka (ABSENT)"]
-    SVC -.-> IAM["IAM role / CloudWatch logs (ABSENT)"]
+    User["Internet Client<br/>/ Browser"] --> R53["Route53 A record<br/>(alias to ALB)"]
+    R53 --> ALB["ALB aws_lb.main<br/>(internet-facing)"]
+    ALB --> LHTTP["Listener :80<br/>(redirect 301 to :443)"]
+    ALB --> LHTTPS["Listener :443<br/>(forward)"]
+    LHTTPS --> SVC["ECS Service 'web'<br/>(Fargate, port 80)"]
+    SVC --> CL["ECS Cluster<br/>aws_ecs_cluster.main"]
+    SVC --> RDS["RDS PostgreSQL<br/>(multi_az)"]
+    SVC --> REDIS["ElastiCache Redis<br/>(:6379)"]
+    SVC --> KAFKA["MSK Kafka<br/>cluster"]
+    SVC --> S3["S3 buckets<br/>(data + logs)"]
+    LHTTPS -.-> TG["aws_lb_target_group.web<br/>(ABSENT)"]
+    SVC -.-> TD["aws_ecs_task_definition.web<br/>(ABSENT)"]
+    RDS -.-> SGPG["aws_security_group<br/>.postgresql (ABSENT)"]
+    REDIS -.-> SNG["aws_elasticache<br/>_subnet_group.redis (ABSENT)"]
+    REDIS -.-> SGR["aws_security_group<br/>.redis (ABSENT)"]
+    KAFKA -.-> SGK["aws_security_group<br/>.kafka (ABSENT)"]
+    SVC -.-> IAM["IAM role / CloudWatch<br/>logs (ABSENT)"]
+    %% Every resource the Terraform module references but never defines carries the dashed
+    %% outline the LG2 key promises, and LG2 itself carries it so the key self-demonstrates.
+    classDef absent stroke-dasharray:6 4
+    class LG2,TG,TD,SGPG,SNG,SGR,SGK,IAM absent
         </pre>
-        <p class="source-note"><span class="src-label">Source</span>infrastructure/terraform/main.tf; documentation/Technical Specifications.md &sect;8</p>
+        <p class="source-note"><span class="src-label">Source</span>infrastructure/terraform/main.tf; docs/guides/deployment.md (17 terraform validate errors); documentation/Technical Specifications.md &sect;INFRASTRUCTURE DIAGRAM</p>
       </section>
 
       <!-- ================= SLIDE 14 — DIVIDER: SECURITY & READINESS ================= -->
-      <section class="slide-divider">
-        <span class="hero-icon" aria-hidden="true"><i data-lucide="shield"></i></span>
-        <span class="eyebrow">Act Three</span>
-        <h2>Security &amp; Readiness</h2>
+      <section class="slide-divider"
+               data-background-color="#2D1C77"
+               data-background-gradient="linear-gradient(135deg, #2D1C77 0%, #5B39F3 100%)">
+        <div class="slide-body">
+          <span class="hero-icon" aria-hidden="true"><i data-lucide="shield" aria-hidden="true"></i></span>
+          <span class="eyebrow">Act Three</span>
+          <h2>Security &amp; Readiness</h2>
+          <!-- W003 F38-DEGRADE-002: under a Lucide outage this slide's hero icon is its ONLY
+               non-text visual, which would breach the AAP Section 0.10.2 "every slide carries at
+               least one non-text visual" contract. The accent bar is painted purely from gradient
+               tokens, so it survives that outage. Placed as the closing element of the content
+               block, matching the deck's existing motif. -->
+          <hr class="accent-bar">
+        </div>
       </section>
 
       <!-- ================= SLIDE 15 — SECURE BY DESIGN ================= -->
-      <section>
+      <section data-background-color="#FFFFFF">
         <span class="eyebrow">Security &amp; Business Value</span>
         <h2>Secure by Design</h2>
         <ul>
@@ -1054,20 +1637,22 @@ flowchart TD
           <div><i data-lucide="shield" aria-hidden="true"></i><span>RBAC</span></div>
         </div>
         <p class="designed-note"><strong>Designed goals</strong> &mdash; 99.99% uptime, 10k req/s, sub-100ms p95 &mdash; targets, not delivered.</p>
-        <p class="source-note"><span class="src-label">Source</span>backend/internal/api/handlers/auth.go; documentation/Technical Specifications.md &sect;6.4 (Designed)</p>
+        <p class="source-note"><span class="src-label">Source</span>backend/internal/api/handlers/auth.go; documentation/Technical Specifications.md &sect;SECURITY CONSIDERATIONS (Designed)</p>
       </section>
 
       <!-- ================= SLIDE 16 — CLOSING ================= -->
-      <section class="slide-closing">
-        <span class="eyebrow">The Takeaway</span>
-        <h2>Documented. Honest. Remediation-Ready.</h2>
-        <ul>
-          <li>Not buildable yet &mdash; the flagged startup wiring defects come first.</li>
-          <li>Then continue toward the designed target architecture.</li>
-          <li>Optionally publish the documentation site.</li>
-        </ul>
-        <hr class="accent-bar">
-        <span class="brand-lockup"><i data-lucide="check-circle" aria-hidden="true"></i> Blitzy</span>
+      <section class="slide-closing" data-background-color="#1A105F">
+        <div class="slide-body">
+          <span class="eyebrow">The Takeaway</span>
+          <h2>Documented. Honest. Remediation-Ready.</h2>
+          <ul>
+            <li>Not buildable yet &mdash; the flagged startup wiring defects come first.</li>
+            <li>Then continue toward the designed target architecture.</li>
+            <li>Optionally publish the documentation site.</li>
+          </ul>
+          <hr class="accent-bar">
+          <span class="brand-lockup"><i data-lucide="check-circle" aria-hidden="true"></i> Blitzy</span>
+        </div>
       </section>
 
     </div>
@@ -1077,54 +1662,273 @@ flowchart TD
        Third-party libraries — pinned CDN versions (reveal.js 5.1.0, Lucide 0.460.0).
        Classic scripts run during parsing, so the Reveal and lucide globals are
        available before the deferred ES module below executes.
-       SRI: add integrity="sha384-…" crossorigin="anonymous" to both <script>s and
-       to the Mermaid ESM import below once the digests can be verified against the
-       live CDN (see the Content Security Policy note in <head>; omitted offline so
-       a stale hash cannot silently break the deck).
+       Both scripts carry a real sha384 SRI digest plus crossorigin="anonymous"; the
+       Mermaid ESM entry is covered by the import map below, which is the only mechanism
+       that can attach a digest to an ES module URL.
        ========================================================================== -->
-  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"
+          integrity="sha384-M/JtqCVlLcK9lwVnBnMXP0V577CBULkjodKsR/PITOe4MSKNbbwqCemEyluOw0+5"
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js"
+          integrity="sha384-ieG+IKD0d/ZPXyCBTMVAbqsQdns8QGJR/e26WMw7M4fkaI/rHcS/YIoi+ah9WGge"
+          crossorigin="anonymous"></script>
+
+  <!-- Import map — the only way to attach an integrity digest to an ES module URL. It must
+       appear before the module script that resolves the "mermaid" specifier. Inline maps are
+       covered by the CSP's script-src 'unsafe-inline'. A browser that does not support the
+       integrity key still resolves the specifier, and a digest mismatch rejects the dynamic
+       import() below, which is already guarded by .catch() and degrades to the caption
+       fallback rather than breaking the deck. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "mermaid": "https://cdn.jsdelivr.net/npm/mermaid@11.4.0/dist/mermaid.esm.min.mjs"
+    },
+    "integrity": {
+      "https://cdn.jsdelivr.net/npm/mermaid@11.4.0/dist/mermaid.esm.min.mjs": "sha384-HbZodwcydhFoeJkM8JD85LgJ4EGrGW8p7/jgYlNNjwawbrvYc5jzWjzs8Z8Lgsvo"
+    }
+  }
+  </script>
 
   <!-- Initialization: Mermaid (ESM) + reveal.js + Lucide.
        ES modules are deferred by default, so this runs after the classic scripts. -->
   <script type="module">
-    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.4.0/dist/mermaid.esm.min.mjs';
+    // =======================================================================
+    // INITIALISATION — three failure-isolated stages (F-CDN-019).
+    //
+    // This module used to open with a top-level `import mermaid from '<cdn>'`. A static
+    // import is part of the module's dependency graph, so if that ONE file could not be
+    // fetched — a single-file 404, a corporate proxy refusing .mjs, an ad-blocker rule —
+    // the module was discarded before its first statement ran. Reveal.initialize() lived
+    // inside it, and reveal.js's own stylesheet hides every slide by default
+    // (`.reveal .slides>section{display:none}`), un-hiding only the one that
+    // Reveal.initialize() marks `.present`. The result was a totally blank viewport with
+    // no uncaught exception: no gradient, no text, no icons, no controls, and 23
+    // unreplaced <i data-lucide> placeholders. Fault tolerance was inverted — blocking
+    // ALL of the CDN also removed reveal.css and left a readable (if unstyled) document,
+    // so a partial outage was strictly worse than a total one.
+    //
+    // The stages below are ordered by how much of the deck depends on them, and each one
+    // is isolated so a later failure cannot undo an earlier success:
+    //   Stage 1  reveal.js  — slide visibility and navigation. Runs FIRST and touches
+    //                         nothing else, so the deck paints before any diagram work
+    //                         is even attempted.
+    //   Stage 2  Lucide     — icon hydration. A UMD global, not part of this module's
+    //                         graph; already guarded, and now also invoked immediately so
+    //                         icons appear even if reveal never becomes ready.
+    //   Stage 3  Mermaid    — diagrams. Loaded through a GUARDED DYNAMIC import(), whose
+    //                         rejection is a caught runtime value rather than a module
+    //                         instantiation error, so it can degrade to an on-brand note
+    //                         instead of taking the deck down with it.
+    // A classic (non-module) safety-net script at the end of <body> covers the residual
+    // case in which this module cannot run at all.
+    // =======================================================================
 
+    // ---- Stage 1: reveal.js ------------------------------------------------
+    // Guarded so that a blocked reveal.js bundle degrades the same controlled way as a
+    // blocked Mermaid module: a bare `Reveal.initialize()` would raise a ReferenceError
+    // and abort this module, taking Lucide and the diagram fallbacks down with it.
+    const revealAvailable =
+      typeof Reveal !== 'undefined' && typeof Reveal.initialize === 'function';
+
+    // F-NAV-007 (1 of 2) — capture the requested slide BEFORE reveal.js can erase it.
+    // In scroll view reveal settles on index 0 during startup (its scroll-view activation
+    // runs while the container's scrollHeight is still 0, so the fragment cannot yet be
+    // honoured) and then calls history.replaceState(pathname + search). By the time the
+    // 'ready' event fires, location.hash has already been rewritten to "" and the deep
+    // link is unrecoverable from the live URL. This statement runs synchronously, before
+    // Reveal.initialize() below, which is the only point at which the fragment still
+    // exists. Null when the URL carried no `#/<n>` fragment, which is the signal to leave
+    // reveal's own scroll-position restore alone. Consumed by the alignment block at the
+    // end of this module; see the full rationale there.
+    const deepLinkIndexAtLoad = (() => {
+      const match = /^#\/(\d+)/.exec(window.location.hash || '');
+      return match ? parseInt(match[1], 10) : null;
+    })();
+
+    // reveal.js: authored for a 1920x1080 canvas.
+    //
+    // F-ZOOM-017 / P6-NEW-3 — DOCUMENTED CONSTRAINT, NOT A DEFERRED FIX.
+    // AAP Section 0.10.2 pins `width: 1920` and `height: 1080`, which makes this a FIXED
+    // CANVAS deck: reveal.js lays every slide out in 1920x1080 authoring pixels and then
+    // fits the whole canvas to the window with one uniform CSS transform. Browser zoom
+    // works by shrinking the CSS pixel, so zooming in reduces `window.innerWidth` in CSS
+    // px, reveal recomputes a proportionally larger scale factor, and the two effects
+    // cancel: measured across a 100%-to-500% sweep, content magnification was 1.000005x
+    // and only reveal's own fixed-position chrome (the chevrons and progress bar, which
+    // sit outside the scaled canvas) grew. That is arithmetic, not a bug, and the only way
+    // to make zoom magnify content is to abandon the fixed canvas the AAP mandates.
+    // Every mitigation that does NOT require changing those two pinned values has been
+    // applied instead, so the deck stays legible without zoom:
+    //   * all type is sized in canvas units and is therefore scale-invariant - there is no
+    //     device-width media query anywhere in this file (see F-SRCNOTE-018), so nothing
+    //     shrinks relative to its neighbours as the window changes;
+    //   * body copy, citations and Mermaid node labels sit at ~15px canvas or above, and
+    //     Mermaid labels are native SVG text that scales without rasterising;
+    //   * grids use explicit tracks rather than device-width-dependent `auto-fit`, so a
+    //     narrow window never collapses a layout (see F-KPI-006);
+    //   * below 435px reveal switches to scroll view, giving each slide a full viewport
+    //     and native pinch-zoom over a normally scrolling document;
+    //   * `?print-pdf` produces a vector PDF that a reader can magnify without limit.
+    // The related residual (P6-NEW-3) is the title slide's white h1 over the mandated hero
+    // gradient: at the 0.2 scale reveal uses for a 375px scroll-view page the heading
+    // renders at ~17.7px bold, just under WCAG's 18.66px bold large-text cutoff, so the
+    // 4.5:1 threshold applies and the lightest gradient stop (#7A6DEC) yields 4.02:1.
+    // AAP Section 0.10.2 mandates BOTH this gradient and white title text, and the AAP
+    // takes precedence over a WCAG heuristic, so the tokens are left exactly as specified.
+    if (revealAvailable) {
+      Reveal.initialize({
+        hash: true,
+        transition: 'slide',
+        controlsTutorial: false,
+        width: 1920,
+        height: 1080,
+        // F20-A11Y (nav-control contrast on dark slides). The five keys above are the
+        // AAP Section 0.10.2 pinned values and are unchanged. Two accessibility keys are
+        // added (the AAP is silent on both): `margin: 0` removes reveal's default 4%
+        // inset so the dark title/divider/closing backgrounds fill the 16:9 viewport
+        // instead of being framed by a white letterbox that made the white nav arrows
+        // vanish; `controlsBackArrows: 'visible'` stops reveal fading the *enabled*
+        // back-arrow to opacity 0.3 (which measured 2.52:1 on navy, below WCAG 1.4.11).
+        // Residual bars at non-16:9 sizes are covered by reveal's own per-slide
+        // background layer, which each section drives through its data-background-color
+        // / data-background-gradient attributes and which spans the full viewport rather
+        // than the scaled slide box.
+        margin: 0,
+        controlsBackArrows: 'visible',
+        // W003 F24-RENDER-001: reveal.js sets display:none on every slide further than
+        // `viewDistance` from the current one, and Mermaid cannot measure text inside a
+        // display:none subtree. Widening the window to the full deck lets the eager
+        // whole-document render pass (overview / print / cold load) measure every diagram,
+        // and keeps hydrated icons and rendered SVGs alive as slides scroll past.
+        viewDistance: 16,
+        // W003 F55-REFLOW-001 (WCAG 1.4.10 Reflow): this is a fixed 1920x1080 canvas that
+        // reveal fits to the window with one uniform transform. At 400% zoom (320 CSS px)
+        // the required scale is 0.167 and at 256 CSS px it is 0.133; reveal's default 0.2
+        // floor would clamp both and force horizontal scrolling. A 0.1 floor keeps the
+        // whole canvas inside the viewport with zero horizontal overflow.
+        minScale: 0.1
+      });
+    } else {
+      console.error(
+        'reveal.js 5.1.0 could not be loaded from the pinned CDN. '
+        + 'Rendering static slide markup only; navigation and overlays are unavailable.'
+      );
+    }
+
+    // ---- Stage 2: Lucide icons ---------------------------------------------
+    // Re-run on every reveal event as well: reveal.js reflows the DOM as slides enter and
+    // leave its view distance, so placeholders can reappear. createIcons() is idempotent
+    // (it consumes [data-lucide] elements and leaves <svg> behind), so repeat calls are
+    // no-ops. Called once here so icons hydrate even if Stage 1 failed.
+    // W003 F41-DIAG-001: each of the three CDN dependencies must say so when it is
+    // missing, otherwise a Lucide outage is indistinguishable from an authoring mistake —
+    // the icons simply are not there, with nothing in the console to explain it. reveal.js
+    // and Mermaid already report their own failures (above and in the import's .catch);
+    // this closes the third. The message is LATCHED because renderIcons() re-runs on
+    // `ready`, on every `slidechanged` and on `resize`, and a per-event error would bury
+    // the rest of the console. Degradation itself is already covered without script: every
+    // [data-lucide] placeholder is sized in CSS so nothing reflows, and every slide carries
+    // a second non-text visual (diagram, table, KPI card or accent bar) so no slide becomes
+    // text-only when the icon set is unavailable.
+    let lucideWarned = false;
+    const renderIcons = () => {
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons();
+        return;
+      }
+      if (!lucideWarned) {
+        lucideWarned = true;
+        console.error(
+          'Lucide 0.460.0 could not be loaded from the pinned CDN; icon placeholders keep '
+          + 'their reserved boxes and every slide retains another non-text visual.'
+        );
+      }
+    };
+    renderIcons();
+
+    // ---- Stage 3: Mermaid --------------------------------------------------
     // Mermaid: manual rendering (startOnLoad:false), Blitzy 'base' theme variables.
-    // Two settings keep flowchart node labels from clipping:
-    //   * top-level fontFamily — the documented key that drives BOTH Mermaid's text
-    //     measurement and the .nodeLabel CSS it bakes into each SVG, so measured and
-    //     rendered widths use the same (Inter) font.
-    //   * flowchart.wrappingWidth — Mermaid caps single-line label boxes at this width
-    //     (default ~200px) expecting the text to wrap; our labels do not wrap, so the
-    //     default clips them. Raising it to 600px lets each label box grow to its full
-    //     single-line width (our widest label is ~430px). useMaxWidth then scales the
-    //     whole SVG to fit the slide.
+    //
+    // LABEL DELIVERY (F-MERM-007/008/009/010) — htmlLabels is false at BOTH the top level
+    // and inside `flowchart`, which makes Mermaid emit node/edge/cluster labels as native
+    // SVG <text>/<tspan> instead of HTML inside a <foreignObject>. This is the fix for a
+    // systemic label-geometry defect, not a cosmetic preference: reveal.js CSS-scales its
+    // slide canvas, and Mermaid's HTML-label path measures label width through that
+    // transformed DOM, so every label came out 1/Reveal.getScale() too wide for its own
+    // box (see the long comment on `.reveal .mermaid svg text` in <style> above for the
+    // measured numbers). SVG text is measured with getBBox() in untransformed user space,
+    // so the layout is identical at every viewport.
+    //
+    // LABEL LEGIBILITY (F-MERM-002/011) — with `useMaxWidth: true` Mermaid emits
+    // width="100%" + max-width:<intrinsic>px, so a diagram whose intrinsic width exceeds
+    // the slide's 1696px card is downscaled and its type shrinks with it. Effective glyph
+    // height is therefore fontSize x (rendered width / intrinsic width). Three levers are
+    // combined to keep that product legible: fontSize is raised to 20px; nodeSpacing and
+    // rankSpacing are tightened (they are fixed pixel gaps that do not scale with the
+    // type, so trimming them buys width back); and every long label in the diagram
+    // sources carries explicit <br/> breaks, which is what actually collapses the widest
+    // rank. Measured result: effective glyph height went from 8.49-14.00px to 15.8-20.0px
+    // across the five diagrams, with zero clipping at scales 1.0 / 0.75 / 0.4.
+    //
     // Security (F7-DECKSEC-001): securityLevel 'antiscript' rather than 'loose'.
-    //   * 'antiscript' keeps HTML labels enabled (htmlLabels:true) — required for the
-    //     Inter font-measurement path that prevents node-label clipping — while
-    //     stripping any <script> from label text, removing the script-injection
+    //   * 'antiscript' strips any <script> from label text, removing the script-injection
     //     surface that 'loose' leaves open. All diagram source here is static and
     //     author-controlled (no user input), so this is a pure hardening with no
     //     rendering regression.
+    //   * F-SEC-020 is additionally closed by htmlLabels:false. 'antiscript' sanitises
+    //     <script> but still permitted <img> inside HTML labels, i.e. a live outbound
+    //     request surface. SVG text labels cannot contain markup at all, so that surface
+    //     no longer exists (verified: 0 <img> elements in every rendered diagram).
     //   * Mermaid 11.4.0 is a MANDATED pin (AAP Section 0.10.2) and cannot be upgraded,
     //     so any Mermaid-level advisory cannot be patched by bumping the version.
     //     RESIDUAL RISK is therefore accepted and compensated by (a) 'antiscript'
-    //     sanitisation, (b) the restrictive Content-Security-Policy in <head> that
-    //     confines executable/style/font origins to the pinned CDN + Google Fonts,
-    //     and (c) the static, no-user-input nature of the deck. A version bump (once
-    //     the AAP pin is lifted) plus SRI on the CDN assets is the Designed hardening.
-    mermaid.initialize({
+    //     sanitisation, (b) htmlLabels:false removing the HTML-label surface entirely,
+    //     (c) the restrictive Content-Security-Policy in <head> that confines
+    //     executable/style/font origins to the pinned CDN + Google Fonts, and (d) the
+    //     static, no-user-input nature of the deck. A version bump (once the AAP pin is
+    //     lifted) plus SRI on the CDN assets is the Designed hardening.
+    // Declared as a plain object so the configuration is built unconditionally, before
+    // (and independently of) the network fetch that provides the renderer able to consume
+    // it. Every key below is byte-identical to the configuration this deck was verified
+    // with; only the call site moved, into the resolved branch of the dynamic import.
+    const MERMAID_CONFIG = {
       startOnLoad: false,
       theme: 'base',
       securityLevel: 'antiscript',
       fontFamily: "'Inter', system-ui, sans-serif",
+      // AUTHORING CONSTRAINT that htmlLabels:false imposes on every diagram above.
+      // With SVG text labels Mermaid routes label text through its markdown parser
+      // and its SVG text builder only emits paragraph/strong/em nodes -- block-level
+      // markdown nodes are silently DISCARDED. So no label line may BEGIN with a
+      // markdown block token ('+ ', '- ', '* ', '1. ', '# ', '> ', '|'), because the
+      // whole line disappears with no error and no console warning. Measured in
+      // Mermaid 11.4.0: "Gin router: gin.Logger()<br/>+ gin.Recovery()" rendered as
+      // one line and dropped "+ gin.Recovery()" entirely. mermaid-cli 11.16 does NOT
+      // reproduce this, so only the pinned browser version is authoritative. Both
+      // affected labels were rewritten to carry the '+' at the END of the previous
+      // line (the pattern D_HEALTH already used safely). Inline '+', '_' and '*'
+      // mid-line are fine -- verified: 0 italic runs and all identifier underscores
+      // intact across every rendered diagram.
+      htmlLabels: false,
       flowchart: {
-        htmlLabels: true,
+        htmlLabels: false,
         useMaxWidth: true,
-        nodeSpacing: 45,
-        rankSpacing: 55,
-        wrappingWidth: 600
+        nodeSpacing: 26,
+        rankSpacing: 34,
+        wrappingWidth: 360,
+        padding: 8,
+        // Subgraph caption clearance. Mermaid reserves only a single 20px line's worth
+        // (~29px) of band at the top of a subgraph for its caption, but it wraps cluster
+        // captions on their own internal ~180px budget -- wrappingWidth (360) does NOT
+        // apply to them -- so a caption of even four short words renders on two lines
+        // (38.2px measured) and the first node dagre places beneath it paints over the
+        // second line. Shortening the caption text does not help, and non-breaking
+        // spaces do not either (Mermaid tokenises on \s, which matches U+00A0).
+        // subGraphTitleMargin.bottom is the one lever that works, and it moves the
+        // caption-to-first-node gap 1:1 (measured 39.5px -> 53.5px for 10 -> 24), so 24
+        // clears the worst measured 6.06px overlap with ~7.9px to spare.
+        subGraphTitleMargin: { top: 4, bottom: 24 }
       },
       themeVariables: {
         primaryColor: '#F2F0FE',
@@ -1133,68 +1937,413 @@ flowchart TD
         lineColor: '#999999',
         secondaryColor: '#F4EFF6',
         fontFamily: "'Inter', system-ui, sans-serif",
-        fontSize: '15px'
+        fontSize: '20px',
+        // F-MERM-003: keep every colour INSIDE the diagrams on the Blitzy palette. The
+        // five variables above are the AAP Section 0.10.2 mandated set and are unchanged;
+        // Mermaid's 'base' theme derives subgraph (cluster) fill, cluster border, cluster
+        // caption colour and the edge-label backing plate from its own defaults, which
+        // painted off-palette #EEF2D9 cluster borders and #000000 cluster captions. The
+        // five keys below map those onto AAP tokens (surface-0, primary, primary-dark,
+        // text, surface-1) so no off-palette value survives in the rendered output.
+        clusterBkg: '#FFFFFF',
+        clusterBorder: '#5B39F3',
+        titleColor: '#2D1C77',
+        textColor: '#333333',
+        edgeLabelBackground: '#F4EFF6'
       }
-    });
+    };
 
-    // reveal.js: authored for a 1920x1080 canvas.
-    Reveal.initialize({
-      hash: true,
-      transition: 'slide',
-      controlsTutorial: false,
-      width: 1920,
-      height: 1080,
-      // F20-A11Y (nav-control contrast on dark slides). The five keys above are the
-      // AAP Section 0.10.2 pinned values and are unchanged. Two accessibility keys are
-      // added (the AAP is silent on both): `margin: 0` removes reveal's default 4%
-      // inset so the dark title/divider/closing backgrounds fill the 16:9 viewport
-      // instead of being framed by a white letterbox that made the white nav arrows
-      // vanish; `controlsBackArrows: 'visible'` stops reveal fading the *enabled*
-      // back-arrow to opacity 0.3 (which measured 2.52:1 on navy, below WCAG 1.4.11).
-      // A per-slide navy letterbox rule in the theme handles any residual bars at
-      // non-16:9 sizes so the controls always sit on a dark ground.
-      margin: 0,
-      controlsBackArrows: 'visible'
-    });
+    // F-CDN-019: when Mermaid is definitively unavailable the diagrams can never be
+    // drawn, so each container is replaced in the layout by one short on-brand note. The
+    // raw DSL is left untouched in the DOM (the `mermaid-unavailable` stylesheet rule
+    // collapses its container) rather than deleted, so the diagram source stays available
+    // for debugging and a reload can still recover the real figure. The note is inserted
+    // BEFORE the container so it lands exactly where the diagram would have been, which on
+    // every diagram slide is directly BELOW the caption: each of those slides orders its
+    // children h2 -> p.fig-caption -> pre.mermaid, so the caption always precedes the note
+    // and the message below must say "above". role="status" lets assistive technology announce
+    // the degradation; the container itself is hidden from the accessibility tree because
+    // its remaining content is Mermaid source, not prose.
+    const showDiagramFallbacks = () => {
+      for (const pre of document.querySelectorAll('pre.mermaid:not([data-processed="true"])')) {
+        if (pre.dataset.fallbackShown === 'true') {
+          continue;
+        }
+        pre.dataset.fallbackShown = 'true';
+        pre.setAttribute('aria-hidden', 'true');
+        const note = document.createElement('p');
+        note.className = 'diagram-fallback';
+        note.setAttribute('role', 'status');
+        note.textContent = 'Diagram unavailable — the diagram renderer could not be '
+          + 'loaded from the network. The caption above describes this figure.';
+        pre.parentNode.insertBefore(note, pre);
+      }
+    };
 
-    // Diagram rendering uses Mermaid 11's mermaid.run() on 'ready' and every
-    // 'slidechanged'. Two reveal.js behaviours must be accommodated:
+    // The guarded dynamic import. Three properties matter:
+    //   * import() is an EXPRESSION, so a network failure rejects a promise instead of
+    //     failing module instantiation — the deck above is already initialised and stays
+    //     up no matter how this settles.
+    //   * The specifier resolves through the import map above to the byte-identical
+    //     AAP-mandated pin (Mermaid 11.4.0), which is what lets an SRI digest apply to an
+    //     ES module URL; it is still covered by the existing script-src CSP directive, so
+    //     no policy change is needed.
+    //   * Resolution is exposed as a promise rather than a mutable global, so every render
+    //     path awaits the same settled value and there is no load-order race: a diagram
+    //     request that arrives before the module has finished downloading simply waits.
+    const mermaidReady = import('mermaid')
+      .then((module) => {
+        const mermaid = module.default;
+        mermaid.initialize(MERMAID_CONFIG);
+        return mermaid;
+      })
+      .catch((err) => {
+        console.error(
+          'Mermaid 11.4.0 could not be loaded from the pinned CDN; '
+          + 'diagrams are replaced by a text fallback. Slides are unaffected.',
+          err
+        );
+        document.documentElement.classList.add('mermaid-unavailable');
+        showDiagramFallbacks();
+        return null;
+      });
+
+    // F-A11Y-004: reveal.js mirrors the current slide's whole text subtree into its
+    // .aria-status live region (getStatusText walks every child node). Mermaid injects
+    // its generated stylesheet as a <style> element INSIDE each diagram SVG, so screen
+    // readers were being read 3,680 characters of raw CSS for every diagram slide instead
+    // of the diagram's description. reveal's getStatusText skips any node carrying
+    // aria-hidden="true", so marking the injected stylesheet hidden restores a meaningful
+    // announcement. The SVG itself is then given role="img" plus an aria-label built from
+    // the diagram's own accTitle/accDescr (Mermaid renders those into <title>/<desc>), so
+    // the announced text is the authored description rather than a bag of node labels.
+    const describeDiagram = (svg) => {
+      for (const styleEl of svg.querySelectorAll('style')) {
+        styleEl.setAttribute('aria-hidden', 'true');
+      }
+      const title = svg.querySelector(':scope > title');
+      const desc = svg.querySelector(':scope > desc');
+      const label = [title && title.textContent, desc && desc.textContent]
+        .filter((part) => part && part.trim().length > 0)
+        .join('. ')
+        .trim();
+      if (label && !svg.getAttribute('aria-label')) {
+        svg.setAttribute('role', 'img');
+        svg.setAttribute('aria-label', label);
+      }
+    };
+
+    // Diagram rendering uses Mermaid 11's mermaid.run(). Four reveal.js behaviours must
+    // be accommodated:
     //   1. reveal.js sets display:none on slides outside the view distance. Running
     //      Mermaid against a display:none <pre> leaves dagre unable to measure text
-    //      (getBBox -> 0), yielding "translate(undefined, NaN)" transforms. We
-    //      therefore scope mermaid.run() to the CURRENTLY VISIBLE slide's not-yet-
-    //      processed nodes (lazy rendering) — visible nodes have real layout.
-    //   2. reveal.js applies transform:scale() to the canvas. Mermaid measures label
-    //      text in a sandbox it appends to document.body (an unscaled context) using
-    //      themeVariables.fontFamily (Inter). Because the deck also renders the injected
-    //      SVG labels in Inter (see the .reveal .mermaid font-family safeguard), the
-    //      measured and rendered fonts match, so node boxes are sized correctly and
-    //      label text never clips. Mermaid marks processed nodes with data-processed,
-    //      so re-invoking run() is safe and idempotent.
-    const runMermaidForCurrentSlide = async () => {
-      const current = Reveal.getCurrentSlide();
-      if (!current) return;
-      const nodes = Array.from(current.querySelectorAll('pre.mermaid'))
-        .filter((n) => n.getAttribute('data-processed') !== 'true');
-      if (nodes.length === 0) return;
-      try {
-        await mermaid.run({ nodes });
-      } catch (err) {
-        console.error('Mermaid run error:', err);
+    //      (getComputedTextLength on an unrendered subtree), yielding
+    //      "translate(undefined, NaN)" transforms. In the normal presentation view we
+    //      therefore scope mermaid.run() to the CURRENTLY VISIBLE slide's
+    //      not-yet-processed nodes (lazy rendering) — visible nodes have layout.
+    //   2. In the print/PDF view (?print-pdf) reveal.js lays out EVERY slide and
+    //      dispatches no 'slidechanged' at all, so the lazy current-slide-only path
+    //      rendered 0 of 5 diagrams and the raw DSL was exported instead of the figures
+    //      (F-PRINT-013). Print view therefore needs one whole-document pass.
+    //   3. That pass may only run AFTER the print layout exists. Reveal's
+    //      isPrintView() is a pure config predicate — printView.isActive() returns
+    //      `config.view === 'print'` — so it is already true during 'ready', while every
+    //      off-screen slide is still display:none and printView.activate() (which awaits
+    //      two animation frames before building the .pdf-page tree) has not run. The
+    //      whole-document pass is consequently gated on the 'pdf-ready' event, which
+    //      activate() dispatches as its final step, and is skipped on 'ready'.
+    //   4. Renders must never overlap. mermaid.run() clears each target container before
+    //      drawing into it, so two passes over the same <pre> make one pass's measurement
+    //      scaffold disappear mid-flight — observed as a hard
+    //      "Cannot read properties of null (reading 'getComputedTextLength')" and a
+    //      "Syntax error in text" placard replacing a diagram. Two safeguards prevent it:
+    //      every node is claimed SYNCHRONOUSLY (before the first await, so a second
+    //      invocation in the same task cannot select it), and all passes are serialised
+    //      through a single promise chain. The claim is released if a pass throws, so a
+    //      genuine failure can still be retried by a later event.
+    let renderChain = Promise.resolve();
+    const claimedNodes = new WeakSet();
+
+    // A Mermaid node can only be rendered while it generates a layout box. With SVG text
+    // labels (htmlLabels:false) Mermaid measures every string through
+    // getComputedTextLength(), which is unavailable inside a `display:none` subtree and
+    // fails with "Cannot read properties of null (reading 'getComputedTextLength')" — the
+    // same class of failure that produced bomb placards before the print gate was added.
+    // reveal.js keeps only slides within its view distance loaded (SlideContent.load() sets
+    // an inline display, unload() sets display:none), and that distance is HARD-CODED to 10
+    // whenever Slide Overview is active (6 on mobile) instead of following
+    // config.viewDistance, so a whole-document pass must skip whatever reveal has unloaded.
+    // `visibility:hidden` — used by the pre-render .mermaid guard in the stylesheet — still
+    // generates boxes, so this test never rejects a node that is merely awaiting reveal.
+    const isMeasurable = (node) => node.getClientRects().length > 0;
+
+    const runMermaidIn = (root) => {
+      const nodes = Array.from(root.querySelectorAll('pre.mermaid'))
+        .filter((n) => n.getAttribute('data-processed') !== 'true'
+          && !claimedNodes.has(n)
+          && isMeasurable(n));
+      for (const node of nodes) {
+        claimedNodes.add(node);
       }
+      renderChain = renderChain.then(async () => {
+        // Awaiting the loader inside the serialised chain keeps every caller — 'ready',
+        // 'slidechanged', 'pdf-ready', 'overviewshown' — correct regardless of whether
+        // Mermaid has finished downloading, and yields null once it is known to be
+        // unreachable. Claims are released in that case so no node is left permanently
+        // reserved by a renderer that will never arrive (F-CDN-019).
+        const mermaid = await mermaidReady;
+        if (!mermaid) {
+          for (const node of nodes) {
+            claimedNodes.delete(node);
+          }
+          return;
+        }
+        if (nodes.length > 0) {
+          try {
+            await mermaid.run({ nodes });
+          } catch (err) {
+            for (const node of nodes) {
+              claimedNodes.delete(node);
+            }
+            console.error('Mermaid run error:', err);
+          }
+        }
+        for (const svg of root.querySelectorAll('pre.mermaid[data-processed="true"] svg')) {
+          describeDiagram(svg);
+        }
+      });
+      return renderChain;
     };
 
-    const renderIcons = () => {
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons();
+    const inPrintView = () =>
+      typeof Reveal.isPrintView === 'function' && Reveal.isPrintView();
+
+    const renderDiagrams = ({ printLayoutReady = false } = {}) => {
+      if (inPrintView()) {
+        // Deliberately a no-op until 'pdf-ready' — see note 3 above.
+        return printLayoutReady ? runMermaidIn(document) : Promise.resolve();
       }
+      const current = Reveal.getCurrentSlide();
+      return current ? runMermaidIn(current) : Promise.resolve();
     };
+
+    // F-OVERVIEW-015: Slide Overview presents every loaded slide at once as a scaled
+    // thumbnail, but the lazy per-slide pass above only ever drew the diagram on a slide the
+    // viewer had actually navigated to — so the Mermaid thumbnails read as blank panels.
+    // Overview therefore needs a whole-document pass. It is safe to render at overview's 0.2
+    // scale because the diagrams use SVG text labels: measurement is scale-invariant, which
+    // is precisely why the foreignObject label path was abandoned. isMeasurable() skips the
+    // slides reveal has unloaded at its hard-coded overview view distance; those slides are
+    // blank in their entirety (not just their diagram) and are drawn by the 'slidechanged'
+    // hook as soon as navigation brings them back into range.
+    const renderAllDiagrams = () => runMermaidIn(document);
 
     // Render the current slide's diagram(s) + all icons once the deck is ready, and
     // again on every slide change (reveal.js reflows the DOM as slides enter/leave the
     // view distance, so icons must be re-materialised and lazily-shown diagrams drawn).
-    Reveal.on('ready', () => { runMermaidForCurrentSlide(); renderIcons(); });
-    Reveal.on('slidechanged', () => { runMermaidForCurrentSlide(); renderIcons(); });
+    // 'pdf-ready' (F-PRINT-013) is the third required hook: with ?print-pdf, reveal.js
+    // defers printView.activate() to the window load event — i.e. AFTER the 1ms 'ready'
+    // dispatch — and never fires 'slidechanged', so 'pdf-ready' is the only point at
+    // which every slide is both laid out and measurable. It is also the ONLY event
+    // allowed to trigger the whole-document pass (printLayoutReady), because
+    // isPrintView() alone cannot distinguish "printing" from "print layout built".
+    // 'overviewshown' (F-OVERVIEW-015) is dispatched by reveal AFTER it has run
+    // updateSlidesVisibility(), laid out the thumbnail grid and re-run Reveal.layout(), so
+    // every slide it intends to keep loaded already has its display and transform applied
+    // and is measurable by the time this fires.
+    // All four hooks are conditional on Stage 1 having succeeded, because Reveal.on() does
+    // not exist otherwise; the no-reveal path already hydrated icons in Stage 2, and the
+    // diagram fallbacks are driven by the loader's own catch rather than by a reveal event.
+    if (revealAvailable) {
+      Reveal.on('ready', () => { renderDiagrams(); renderIcons(); });
+      Reveal.on('slidechanged', () => { renderDiagrams(); renderIcons(); });
+      Reveal.on('pdf-ready', () => { renderDiagrams({ printLayoutReady: true }); renderIcons(); });
+      Reveal.on('overviewshown', () => { renderAllDiagrams(); renderIcons(); });
+      // W003 F25-LIFECYCLE-001: leaving reveal's ScrollView (and any layout mode change)
+      // rebuilds the slide DOM, discarding every JS-hydrated node — the Lucide <svg>s and
+      // the Mermaid SVGs — while dispatching no 'slidechanged'. Rehydrating on 'resize'
+      // (which reveal fires for mode changes as well as window resizes) plus a debounced
+      // window listener restores them. Both entry points call the same idempotent
+      // renderers, so a burst of resize events cannot double-render.
+      Reveal.on('resize', () => { renderDiagrams(); renderIcons(); });
+      let rehydrateTimer = null;
+      window.addEventListener('resize', () => {
+        window.clearTimeout(rehydrateTimer);
+        rehydrateTimer = window.setTimeout(() => { renderDiagrams(); renderIcons(); }, 300);
+      });
+    }
+
+    /* ----------------------------------------------------------------------------
+     * F-NAV-007 — deep-link alignment in scroll view.
+     *
+     * Below reveal.js's scrollActivationWidth (435px) the deck switches to scroll view:
+     * every section is re-parented into a `.scroll-page` wrapper exactly one viewport
+     * tall, and `body.reveal-viewport` becomes the scroll container. reveal positions a
+     * requested slide by proportion rather than by page:
+     *
+     *     scrollTop = (index / pageCount) * (scrollHeight - offsetHeight)
+     *
+     * With 16 pages of 812px that is index * 761.25px instead of index * 812px, so the
+     * target drifts 50.75px short per page. Past the halfway point the drift exceeds half
+     * a page and scroll-snap resolves to the PREVIOUS page — which is why a deep link to
+     * #/9 or #/12 landed one slide early for every index >= 8.
+     *
+     * Runtime measurement of that first correction attempt showed it never executed once:
+     * FOUR further mechanisms sit in front of the arithmetic, each on its own sufficient to
+     * defeat a naive fix. All four are addressed explicitly below.
+     *
+     *   A. THE FRAGMENT IS ERASED BEFORE IT CAN BE USED. reveal rewrites the URL to
+     *      pathname + search during startup while it is still on index 0, so by 'ready'
+     *      time location.hash is "". The requested index is therefore captured
+     *      synchronously at the top of this module, before Reveal.initialize() runs
+     *      (`deepLinkIndexAtLoad`), rather than read back from the live URL.
+     *
+     *   B. REVEAL'S OWN CURRENT INDEX IS ALREADY WRONG. After the proportional scroll and
+     *      the snap, reveal re-derives the active slide FROM the resulting scroll position,
+     *      so Reveal.getIndices().h reports the slide it mistakenly landed on — 11 for a
+     *      request of 12. Correction is keyed on the index the URL asked for, never on
+     *      reveal's idea of where it already is.
+     *
+     *   C. A TIME-BASED SCROLL GUARD SUPPRESSES EVERY REAL CORRECTION. reveal's own
+     *      programmatic scroll emits a `scroll` event microseconds before the correction
+     *      runs, so a guard keyed on "any recent scroll activity" cannot distinguish
+     *      reveal's write from the viewer's gesture and suppresses unconditionally.
+     *      Deferral is keyed on genuine INPUT GESTURES instead (wheel / touch / keydown),
+     *      which no programmatic scroll can synthesise.
+     *
+     *   D. MANDATORY SNAP MAKES "IS THE CURRENT PAGE ALIGNED?" ALWAYS TRUE. reveal sets
+     *      `scroll-snap-type: y mandatory` on the container, so whichever page it landed on
+     *      is always flush with the top and a tolerance test against it always short
+     *      circuits. The tolerance is applied to the REQUESTED page instead, whose top edge
+     *      is a full page away precisely when the deep link has missed.
+     *
+     * Binding: 'ready' (once, and only when the URL actually carried a fragment) and
+     * 'hashchange' (every explicit navigation) — never 'slidechanged', which in scroll view
+     * fires continuously while the viewer scrolls by hand. reveal's own
+     * restoreScrollPosition() runs LAST in its scroll-view activation and can overwrite the
+     * correction from sessionStorage, so the initial alignment re-asserts itself over a
+     * short ~360ms window and abandons that window the instant an input gesture arrives.
+     * Nothing runs outside scroll view, where reveal's deep linking is already correct, and
+     * nothing runs when the URL carries no `#/<n>` fragment, so reveal's scroll-position
+     * restore is left untouched for ordinary revisits. Sections are addressed with a
+     * DESCENDANT selector because scroll view re-parents them three levels deep
+     * (.scroll-page > .scroll-page-sticky > .scroll-page-content > section), so a child
+     * selector on `.slides` matches nothing here. */
+    if (revealAvailable) {
+      const SCROLL_ALIGN_TOLERANCE = 4;
+      let viewerTookOver = false;
+
+      // Mechanism C. Only gestures a human can produce are treated as "the viewer is
+      // driving". A programmatic scrollTop write raises `scroll` but can never raise
+      // wheel/touch/keydown, which is what makes this attribution reliable.
+      ['wheel', 'touchstart', 'touchmove', 'keydown'].forEach((type) => {
+        window.addEventListener(
+          type,
+          () => { viewerTookOver = true; },
+          { passive: true, capture: true }
+        );
+      });
+
+      const scrollViewActive = () =>
+        typeof Reveal.isScrollView === 'function' && Reveal.isScrollView();
+
+      const scrollContainer = () =>
+        (typeof Reveal.getViewportElement === 'function' && Reveal.getViewportElement()) ||
+        document.body;
+
+      // Aligns the page for `index` with the top of the scroll container. Mechanism D: the
+      // tolerance is measured against the REQUESTED page, not the current one. Returns true
+      // when that page is (or already was) flush, and false when the index addresses no
+      // page at all — which is how an out-of-range or malformed fragment becomes a no-op.
+      const alignScrollView = (index) => {
+        if (!scrollViewActive()) { return false; }
+
+        const pages = document.querySelectorAll('.reveal .slides .scroll-page');
+        const page = pages[index];
+        if (!page) { return false; }
+
+        if (Math.abs(page.getBoundingClientRect().top) <= SCROLL_ALIGN_TOLERANCE) {
+          return true;
+        }
+
+        page.scrollIntoView({ behavior: 'instant', block: 'start' });
+
+        // scrollIntoView resolves against the nearest scrolling ancestor; if anything in
+        // the sticky/snap chain leaves a residue, close it arithmetically.
+        const residual = page.getBoundingClientRect().top;
+        if (Math.abs(residual) > SCROLL_ALIGN_TOLERANCE) {
+          const container = scrollContainer();
+          container.scrollTop = container.scrollTop + residual;
+        }
+        return Math.abs(page.getBoundingClientRect().top) <= SCROLL_ALIGN_TOLERANCE;
+      };
+
+      // Mechanisms A and B, plus reveal's late sessionStorage restore: use the index
+      // captured before initialize(), and re-assert it briefly so a restore that lands
+      // after 'ready' cannot win. Yields permanently on the first input gesture.
+      const alignAfterLoad = () => {
+        if (deepLinkIndexAtLoad === null) { return; }
+        let attempt = 0;
+        const assertAlignment = () => {
+          if (viewerTookOver || !scrollViewActive()) { return; }
+          alignScrollView(deepLinkIndexAtLoad);
+          attempt += 1;
+          if (attempt < 4) { window.setTimeout(assertAlignment, 120); }
+        };
+        requestAnimationFrame(assertAlignment);
+      };
+
+      // An explicit hash navigation is always the viewer's intent, so this path carries no
+      // gesture guard. reveal's own handler runs first because it registered during
+      // initialize(); deferring one frame makes this correction the last write to the
+      // scroll position, and one late re-assert absorbs the snap that settles afterwards.
+      const alignAfterHashChange = () => {
+        const match = /^#\/(\d+)/.exec(window.location.hash || '');
+        if (!match) { return; }
+        const index = parseInt(match[1], 10);
+        requestAnimationFrame(() => {
+          alignScrollView(index);
+          window.setTimeout(() => { alignScrollView(index); }, 120);
+        });
+      };
+
+      Reveal.on('ready', alignAfterLoad);
+      window.addEventListener('hashchange', alignAfterHashChange);
+    }
+  </script>
+
+  <!-- ==========================================================================
+       F-CDN-019 safety net — deliberately a CLASSIC script, not a module.
+       Everything above depends on assets fetched from the CDN. This block does not: it is
+       inline, parses with the document, and cannot be prevented from running by any
+       network condition (the Content Security Policy in <head> already permits
+       'unsafe-inline' for script-src, so no policy change is required).
+       reveal.js's stylesheet hides every slide until Reveal.initialize() marks one
+       `.present`, so a deck that never initialises renders as a blank white viewport —
+       measurably worse than a full CDN outage, which at least removes the hiding rules
+       too. If the deck has not reported ready by the time this fires, `reveal-unavailable`
+       is stamped on <html> and the stylesheet above promotes all 16 sections back into
+       normal document flow, leaving a plain, readable, scrolling document.
+       The delay is generous relative to a healthy load (reveal reports ready within a few
+       milliseconds of the bundle arriving) so a slow-but-working network is never
+       misdiagnosed, and the check is skipped entirely once ready, so no healthy load can
+       ever see these rules.
+       ========================================================================== -->
+  <script>
+    (function () {
+      var FALLBACK_DELAY_MS = 8000;
+      window.setTimeout(function () {
+        var deck = document.querySelector('.reveal');
+        var ready = deck && deck.classList.contains('ready');
+        if (deck && !ready) {
+          document.documentElement.classList.add('reveal-unavailable');
+          console.error(
+            'The presentation framework did not initialise within '
+            + FALLBACK_DELAY_MS + 'ms. Showing all slides as a plain scrolling document.'
+          );
+        }
+      }, FALLBACK_DELAY_MS);
+    }());
   </script>
 </body>
 </html>

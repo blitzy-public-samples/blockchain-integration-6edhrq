@@ -14,7 +14,7 @@ Every capability across this documentation set is tagged with a project-wide mat
 
 The **authoritative, full vocabulary** — including the composite qualifiers *Implemented-with-defects (source-present, non-buildable)* and *Implemented-but-broken*, together with the consolidated maturity matrix and the complete defect catalog — lives in the reconciliation page's [Maturity Legend](architecture/scaffold-vs-design.md#maturity-legend). Sibling pages defer to it.
 
-> **Known code defects are documented honestly, not fixed.** The scaffold contains concrete, verified gaps — an uninitialized ticker interval that panics at startup `Source: backend/internal/tasks/transaction_processor.go:L13-L16`, a router-signature mismatch between the composition root's four-argument call and the router's zero-argument definition `Source: backend/cmd/server/main.go:L52`, `Source: backend/internal/api/routes.go:L9`, backend packages that are imported (`Source: backend/cmd/server/main.go:L6-L12`) but absent from the tree, and no committed `go.mod` (`Source: repository root (no go.mod present)`). These are catalogued in full in [`architecture/scaffold-vs-design.md`](architecture/scaffold-vs-design.md) rather than silently omitted.
+> **Known code defects are documented honestly, not fixed.** The scaffold contains concrete, verified gaps — an uninitialized ticker interval that *would* panic at startup, latent behind the compile failure that stops the build first `Source: backend/internal/tasks/transaction_processor.go:L13-L16`, `Source: backend/internal/tasks/transaction_processor.go:L10`, a router-signature mismatch between the composition root's four-argument call and the router's zero-argument definition `Source: backend/cmd/server/main.go:L52`, `Source: backend/internal/api/routes.go:L9`, backend packages that are imported (`Source: backend/cmd/server/main.go:L6-L12`) but absent from the tree, and no committed `go.mod` (`Source: repository root (no go.mod present)`). These are catalogued in full in [`architecture/scaffold-vs-design.md`](architecture/scaffold-vs-design.md) rather than silently omitted.
 
 ## Documentation Map
 
@@ -69,6 +69,8 @@ Pick your starting point by role. Every path below resolves within this tree exc
 
 Every link below points to a page produced as part of this documentation set. All paths are relative to this file (`docs/index.md`).
 
+Two pages — [`operations/system-administration.md`](operations/system-administration.md) and [`training/training-materials.md`](training/training-materials.md) — fulfill Software Project Proposal deliverables (items 6 and 10) that the Agent Action Plan restates as binding (AAP §0.1.1, §0.11.2) but does not enumerate as rows in its §0.5.1 file-transformation map, so a plan-versus-delivered path diff reports them as extras. Each page records that provenance in its own opening section; the entries below name it inline so the delta is self-explaining. `Source: documentation/Software Project Proposal.md:L401-L402` `Source: documentation/Software Project Proposal.md:L419-L421`
+
 ### Getting Started
 
 - [`getting-started/installation.md`](getting-started/installation.md) — Prerequisites (Go, Node, PostgreSQL, Redis) and install steps; corrects the stale `mysql`/`.env.example` errors carried by `scripts/setup.sh`.
@@ -79,7 +81,7 @@ Every link below points to a page produced as part of this documentation set. Al
 
 - [`architecture/overview.md`](architecture/overview.md) — System overview with the before/after pair **Fig A1** (current-implemented scaffold) and **Fig A2** (designed target).
 - [`architecture/backend.md`](architecture/backend.md) — The Go/Gin layered modular monolith, dependency injection, and composition-root wiring-gap callouts.
-- [`architecture/frontend.md`](architecture/frontend.md) — The React 18 + Redux Toolkit component and state architecture (**Fig A3**).
+- [`architecture/frontend.md`](architecture/frontend.md) — The React 18 + Redux Toolkit component and state architecture (**Fig A3**), plus the client-side Zod validation reference for the three schema modules.
 - [`architecture/data-flow.md`](architecture/data-flow.md) — Authentication, transaction-settlement, and signature sequences (**Fig B1/B2/B3**) plus the end-to-end data flow (**Fig DF1**).
 - [`architecture/data-model.md`](architecture/data-model.md) — The five GORM entities, field tables, the ERD (**Fig M1**), and the dual-identifier gap note. `Source: backend/internal/db/schema.go:L11-L68`
 - [`architecture/scaffold-vs-design.md`](architecture/scaffold-vs-design.md) — The authoritative Implemented/Provisioned/Designed matrix and the full defect catalog reconciling the design corpus against the on-disk scaffold.
@@ -105,7 +107,7 @@ The backend exposes **18 REST endpoints** with no `/api/v1` prefix and a singula
 ### Operations
 
 - [`operations/observability.md`](operations/observability.md) — Structured logging with correlation IDs, distributed tracing, a `/metrics` endpoint, and health/readiness checks, stating precisely what is **reused** (Gin access logging and worker structured logging — both **emission-only** and **source-present (non-buildable)**, so they do not run today) versus **added** (**Designed** correlation IDs, tracing, metrics, health endpoints).
-- [`operations/system-administration.md`](operations/system-administration.md) — The consolidated system-administration guide: configuration, deployment, database and cache administration, backup and recovery, monitoring, user and role administration, security administration, and incident response.
+- [`operations/system-administration.md`](operations/system-administration.md) — The consolidated system-administration guide: configuration, deployment, database and cache administration, backup and recovery, monitoring, user and role administration, security administration, and incident response. Fulfills Software Project Proposal DELIVERABLES item 6 ("User Manuals" → *System administration guide*); not a row in the AAP §0.5.1 map. `Source: documentation/Software Project Proposal.md:L401-L402`
 - [`operations/runbook.md`](operations/runbook.md) — Alerts and failure modes, including the startup ticker panic and settlement-retry behavior.
 - [`operations/dashboard-template.json`](operations/dashboard-template.json) — The observability dashboard template (metric, log, and health panels).
 
@@ -115,7 +117,7 @@ The backend exposes **18 REST endpoints** with no `/api/v1` prefix and a singula
 
 ### Training
 
-- [`training/training-materials.md`](training/training-materials.md) — The role-based onboarding and training course, delivering the proposal's written guides for common operations (with operator/dashboard depth) and labeling the video tutorials as **Designed**.
+- [`training/training-materials.md`](training/training-materials.md) — The role-based onboarding and training course, delivering the proposal's written guides for common operations (with operator/dashboard depth) and labeling the video tutorials as **Designed**. Fulfills Software Project Proposal DELIVERABLES item 10 ("Training Materials"); not a row in the AAP §0.5.1 map. `Source: documentation/Software Project Proposal.md:L419-L421`
 
 ### Contributing
 

@@ -19,11 +19,37 @@
  * reveal.js     : Targets the reveal.js 5.1.0 DOM (.reveal .slides section ...),
  *                 authored for a 1920x1080 slide canvas.
  * Mermaid       : The .mermaid container harmonizes with the deck's Mermaid
- *                 themeVariables { primaryColor:#F2F0FE (=--blitzy-surface-2),
+ *                 themeVariables. The five AAP-mandated variables are
+ *                 { primaryColor:#F2F0FE (=--blitzy-surface-2),
  *                 primaryTextColor:#333333 (=--blitzy-text),
  *                 primaryBorderColor:#5B39F3 (=--blitzy-primary),
  *                 lineColor:#999999 (=--blitzy-text-muted),
- *                 secondaryColor:#F4EFF6 (=--blitzy-surface-1) }.
+ *                 secondaryColor:#F4EFF6 (=--blitzy-surface-1) }; the deck also
+ *                 pins the remaining diagram chrome to the same token set
+ *                 { clusterBkg:#FFFFFF (=--blitzy-surface-0),
+ *                 clusterBorder:#5B39F3 (=--blitzy-primary),
+ *                 titleColor:#2D1C77 (=--blitzy-primary-dark),
+ *                 textColor:#333333 (=--blitzy-text),
+ *                 edgeLabelBackground:#F4EFF6 (=--blitzy-surface-1) } so no
+ *                 off-palette Mermaid default can reach the rendered SVG.
+ *                 The container rules below assume the deck's flowchart geometry
+ *                 contract, which any consumer of this theme must reproduce for
+ *                 the height budget to hold:
+ *                 { htmlLabels:false (BOTH top-level and flowchart -- see the
+ *                 note above rule 5), fontSize:'20px', wrappingWidth:360,
+ *                 nodeSpacing:26, rankSpacing:34, padding:8,
+ *                 subGraphTitleMargin:{ top:4, bottom:24 } }.
+ *                 subGraphTitleMargin.bottom must stay generous: Mermaid wraps
+ *                 subgraph captions on an internal ~180px budget that
+ *                 wrappingWidth does not affect, so a two-line caption needs
+ *                 more than the single ~29px line Mermaid reserves, and this key
+ *                 is the only lever that moves the caption-to-node gap (1:1).
+ *                 Diagrams should also prefer rounded rectangles over Mermaid's
+ *                 stadium shape: a stadium sizes itself as (text height + 10)
+ *                 and ignores padding, so multi-line labels have too little
+ *                 vertical slack; a rounded rectangle plus
+ *                 'classDef <name> rx:26,ry:26' gives the same pill silhouette
+ *                 with padding-responsive geometry.
  * Source        : AAP Section 0.10.2 USER PROVIDED TEMPLATE (tokens verbatim).
  * ============================================================================
  */
@@ -59,20 +85,84 @@
 /* ---------------------------------------------------------------------------
  * 2. Base reveal.js surfaces  —  default (content) slides
  * ------------------------------------------------------------------------- */
+/* F42-PERF-001 (deck rule mirrored) - eliminate the white holding frame on a cold load.
+   `.reveal .slides > section` ships `display: none` and only the `.present` section is
+   promoted, and that class is assigned by reveal.js at RUNTIME, so no stylesheet change can
+   make slide content paint before the script runs. What IS remediable is the COLOUR of the
+   holding frame: painting the brand navy from the very first frame replaces a pure-white
+   hold with a branded dark ground that hands over to the dark title slide without a white
+   flash. The rule self-retires the instant reveal.js adds `html.reveal-full-page`, so the
+   SETTLED rendering is byte-identical, and `@media screen` excludes print view (which never
+   receives that class) so this cannot contribute to a print-background defect. `@media
+   screen` is a MEDIA-TYPE query, not the device-geometry query section 9 rules out. */
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+/* F42-PERF-001 x F-CDN-019 interaction — the navy holding frame must retire when the
+   classic safety net promotes the deck into a plain scrolling document, not only when
+   reveal.js reports ready. The dark-slide rescue further down re-paints the title, divider
+   and closing grounds on the sections themselves, but the content slides declare
+   data-background-color="#FFFFFF" and stay transparent, so while the navy was still on the
+   root their #2D1C77 headings and #333333 body text landed on navy at 1.20:1 and 1.30:1 —
+   invisible. Retiring the holding frame on `reveal-unavailable` and pinning the document
+   ground to the surface token restores the intended 13.60:1 and 12.63:1, and costs the
+   holding frame nothing: it only ever matters inside the 8s window before the safety net
+   fires. The two selectors are mutually exclusive, so neither relies on source order, and a
+   healthy load never carries either class. */
+@media screen {
+  html:not(.reveal-full-page):not(.reveal-unavailable) { background: var(--blitzy-primary-navy); }
+  html.reveal-unavailable { background: var(--blitzy-surface-0); }
+}
+
+/* The viewport is the neutral fallback ground only. Every slide declares its own ground
+   through reveal.js's per-slide background system — a literal-hex data-background-color
+   on every <section>, plus a data-background-gradient on the title and divider slides —
+   so this colour is visible only before the first background syncs.
+
+   PER-SLIDE BACKGROUND CONTRACT (consumers of this theme MUST honour it):
+     .slide-title    data-background-color="#5B39F3"
+                     data-background-gradient="linear-gradient(68deg, #7A6DEC 15.56%,
+                                               #5B39F3 62.74%, #4101DB 84.44%)"
+     .slide-divider  data-background-color="#2D1C77"
+                     data-background-gradient="linear-gradient(135deg, #2D1C77 0%,
+                                               #5B39F3 100%)"
+     .slide-closing  data-background-color="#1A105F"
+     content slides  data-background-color="#FFFFFF"
+   The colour MUST be a literal hex, never var(--token): reveal derives its
+   has-dark-background / has-light-background contrast class by parsing that attribute
+   with a matcher that accepts only #rgb, #rrggbb, rgb() and rgba(). A gradient ALONE
+   derives nothing — reveal falls back to the computed background-color of
+   .slide-background, which its own stylesheet pins to rgba(0,0,0,0), and a zero alpha
+   makes it bail out — which is why the two gradient slide types also carry a colour. */
 .reveal-viewport {
   background: var(--blitzy-surface-0);
 }
-/* F20-A11Y (nav-control contrast root cause): content slides keep the white viewport
-   above, but on the dark title/divider/closing slides that white surface becomes a
-   letterbox the white nav arrows disappear against. Darken the viewport to navy
-   whenever a dark slide is present (live :has()), so the controls — and any residual
-   letterbox bar at non-16:9 sizes — sit on a dark ground (white arrow on navy = 16:1).
-   Token-based; reverts to the white surface on content slides automatically. */
-.reveal-viewport:has(section.present.slide-title),
-.reveal-viewport:has(section.present.slide-divider),
-.reveal-viewport:has(section.present.slide-closing) {
-  background: var(--blitzy-primary-navy);
-}
+/* F-OVERVIEW-015 / F-SCROLLVIEW-008 — the letterbox paint that previously lived here as
+   three `.reveal-viewport:has(section.present.slide-*) { background: navy }` rules has
+   been RETIRED in favour of the per-slide background system described above. reveal
+   SNAPSHOTS the computed viewport background and re-uses it as a page ground in three of
+   its four view modes, so that one rule produced four different defects:
+     - ?print-pdf   printView.activate() copies getComputedStyle(viewport).background onto
+                    every .pdf-page, and in print view reveal marks ALL sections .present,
+                    so all three :has() selectors matched at once and every exported page
+                    was painted navy — putting #2D1C77 headings on #1A105F at 1.20:1.
+     - Overview     the navy viewport stayed behind transparent thumbnails, collapsing
+                    heading contrast 13.600:1 -> 1.203:1 and body 12.635:1 -> 1.295:1.
+     - Scroll view  ScrollView.activate() takes the same snapshot but BEFORE any slide is
+                    .present, so the rules did not match, every .scroll-page was painted
+                    white, and the dark slides floated inside white bands.
+     - Normal view  only here did the rule behave as intended.
+   A per-slide .slide-background is instead re-parented by reveal into each .pdf-page,
+   each .scroll-page-content and each overview grid cell, so ONE declaration per slide is
+   correct in all four modes. It still covers the letterbox, because .reveal .backgrounds
+   and .reveal .slide-background are both position:absolute; width:100%; height:100% of
+   .reveal — the whole viewport, not the scaled 16:9 slide box — so the F20-A11Y intent is
+   preserved. The nav-arrow half of F20-A11Y is preserved verbatim by the
+   `.reveal:has(section.present.slide-*) .controls button` rules in section 8, which are
+   deliberately KEPT. */
 
 .reveal {
   font-family: var(--ff-body);
@@ -94,6 +184,33 @@
   box-sizing: border-box;
 }
 
+/* F35-TRANSITION-001 - remove the cross-fade from the slide move. reveal.css transitions
+   `opacity` over the same 800ms cubic-bezier(.26,.86,.44,.985) as `transform`, so during
+   every slide change BOTH the outgoing and the incoming section are translucent and their
+   ink composites with whatever shows through - measured contrast collapsing to ~1.0:1 on
+   every white<->dark move. Each section owns an OPAQUE ground (the per-slide background
+   contract above), so the fade buys nothing and only costs legibility. Dropping `opacity`
+   from the `.present` transition list makes the move a true opaque push; `.past`/`.future`
+   keep a ZERO-duration opacity change DELAYED to the end of the move (0s linear 0.8s) so
+   the resting `opacity: 0` reveal relies on is still reached - a flat `opacity: 1` would
+   send every off-canvas section flying across the viewport on a single backwards jump.
+   `:not(.overview):not(.overview-deactivating)` preserves reveal's own `transition: none`
+   in overview mode. Print view, overview and scroll view each force `opacity: 1
+   !important`, so this is presentation-view only and cannot affect ?print-pdf. The
+   reduced-motion block in section 9 overrides all of it with `!important`. */
+.reveal.slide:not(.overview):not(.overview-deactivating) .slides > section.present {
+  transition: transform 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985),
+              transform-origin 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985),
+              visibility 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985);
+}
+.reveal.slide:not(.overview):not(.overview-deactivating) .slides > section.past,
+.reveal.slide:not(.overview):not(.overview-deactivating) .slides > section.future {
+  transition: transform 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985),
+              transform-origin 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985),
+              visibility 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985),
+              opacity 0s linear 0.8s;
+}
+
 .reveal h1,
 .reveal h2,
 .reveal h3,
@@ -113,11 +230,28 @@
 
 .reveal p { line-height: 1.42; }
 
-.reveal a { color: var(--blitzy-primary); text-decoration: none; }
-.reveal a:hover { color: var(--blitzy-primary-deep); text-decoration: underline; }
+/* F-HELP-016 (same leak class as the scoped table rules in section 6): scoped to
+   `.reveal .slides section a`, NOT `.reveal a`. reveal.js injects its keyboard-shortcut
+   overlay as `.reveal > .overlay.overlay-help > header > a.close` — inside .reveal but
+   OUTSIDE .slides — so the broader selector repainted reveal's own close control with
+   var(--blitzy-primary). That was cosmetically inert, because the control draws its glyph
+   from a base64 background-image and the inherited color never painted, but it is the
+   identical stylesheet leak the table rules were narrowed to stop and is closed the same
+   way rather than left as a latent override of reveal's chrome. Narrowing costs nothing:
+   authored in-slide links keep the full brand treatment. The DESCENDANT combinator is
+   deliberate: reveal re-parents sections into .pdf-page (print) and .scroll-page-content
+   (scroll view), both still inside .slides, so a child combinator would silently drop this
+   styling in those two view modes. */
+.reveal .slides section a { color: var(--blitzy-primary); text-decoration: none; }
+.reveal .slides section a:hover { color: var(--blitzy-primary-deep); text-decoration: underline; }
 
+/* F50-TYPO-001: the deck requests Inter 700 from Google Fonts but nothing activated it,
+   so the weight never rendered. Bold in-prose emphasis now uses the requested face and
+   gains the intended weight contrast. Mermaid labels are insulated by the explicit
+   font-weight:400 pin on `.reveal .mermaid svg .nodeLabel` et al. (section 5), so no
+   diagram can reflow as a result of this change. */
 .reveal strong,
-.reveal b { color: var(--blitzy-primary-dark); font-weight: 600; }
+.reveal b { color: var(--blitzy-primary-dark); font-weight: 700; }
 
 .reveal ul,
 .reveal ol { display: inline-block; margin-left: 0.4em; }
@@ -125,6 +259,41 @@
 .reveal li { margin-bottom: 0.45em; line-height: 1.35; }
 
 .reveal .slides section ul li::marker { color: var(--blitzy-primary); }
+
+/* --blitzy-primary (#5B39F3, relative luminance 0.1162) on the closing slide's
+   --blitzy-primary-navy ground (#1A105F, 0.0142) is 2.59:1 - under the 3:1 WCAG 2.1
+   requires of a non-text graphical indicator (1.4.11) and of a list marker as small text
+   (1.4.3). The bullet copy itself is white and unaffected (16.36:1), so only the marker is
+   re-tokened. --blitzy-accent-teal (#94FAD5, 0.7947) is this theme's on-dark accent and
+   reaches 13.17:1 on navy. Scoped to the dark slide-types so light content slides keep the
+   brand violet. Palette tokens only; no token VALUE changes. */
+.reveal .slides section.slide-closing ul li::marker,
+.reveal .slides section.slide-divider ul li::marker,
+.reveal .slides section.slide-title ul li::marker { color: var(--blitzy-accent-teal); }
+
+/* PDF EXPORT PAGE GEOMETRY (F52/F54 + the PDF bullet-marker defect, resolved as ONE rule).
+   reveal.js's print controller re-parents each section into a `.pdf-page` wrapper and then
+   (a) writes a stale inline `top` computed from the section's scrollHeight BEFORE
+   re-parenting, which pushes content tens to hundreds of px down the page, and (b) forces
+   `padding: 0 !important` on the section, collapsing the authored `64px 96px` content
+   gutter to zero. Two defects follow from (b): the lists above carry no left padding and
+   inherit `list-style-position: outside`, so with a zero gutter each disc resolves to a
+   NEGATIVE x and `.pdf-page { overflow: hidden }` clips every marker out of the export
+   (silently stripping the bullets and neutralising the marker re-tokening above), and every
+   line of body copy starts hard against the paper edge.
+   Pinning the section to the page origin and RESTORING the authored gutter fixes both at
+   the root: the printed page then has the same 64px/96px content band as the screen, so
+   outside markers sit inside the page exactly as they do in presentation view - no
+   per-element `padding-left` shim on the lists is needed, and the hanging-indent semantics
+   are preserved (switching to `list-style-position: inside` would instead re-flow wrapped
+   lines under the marker). Consumers that place citation lines or other absolutely
+   positioned furniture inside a section must additionally return it to the normal flow in
+   print view so it is part of the very scrollHeight reveal measures. */
+html.reveal-print .reveal .slides .pdf-page > section {
+  top: 0 !important;
+  left: 0 !important;
+  padding: 64px 96px !important;
+}
 
 .reveal ::selection {
   background: var(--blitzy-accent-teal);
@@ -135,14 +304,15 @@
  * 3. Slide-type classes  —  applied to reveal.js <section> elements
  * ------------------------------------------------------------------------- */
 
-/* 3.1 Title slide  —  hero gradient, white text, teal Fira Code eyebrow */
+/* 3.1 Title slide  —  hero gradient, white text, teal Fira Code eyebrow.
+   The GROUND comes from data-background-gradient / data-background-color on the <section>
+   (see the per-slide background contract in section 2). No `background` is declared here:
+   a section-level copy would DOUBLE-PAINT, and because the section box and the page box
+   differ in size in print and scroll view, the two independently-scaled gradients meet in
+   a visible seam — the "title gradient floats inside a band" symptom. The reveal-managed
+   .slide-background is the single owner of the paint. */
 .reveal .slides section.slide-title {
-  background: var(--gradient-hero);
   color: var(--blitzy-text-invert);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
   text-align: left;
 }
 .reveal .slides section.slide-title h1,
@@ -158,15 +328,12 @@
    The token value is unchanged; only its use context (opacity) is corrected. */
 .reveal .slides section.slide-title p { color: var(--blitzy-text-invert); }
 
-/* 3.2 Section divider  —  dark purple / gradient, centered title + hero icon */
+/* 3.2 Section divider  —  dark purple / gradient, centered title + hero icon.
+   Ground comes from data-background-gradient (--gradient-divider, byte-identical) over
+   data-background-color="#2D1C77" (--blitzy-primary-dark, the AAP's stated flat-colour
+   alternative). See the note on .slide-title for why no `background` is declared here. */
 .reveal .slides section.slide-divider {
-  background: var(--blitzy-primary-dark);
-  background: var(--gradient-divider);
   color: var(--blitzy-text-invert);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
   text-align: center;
 }
 .reveal .slides section.slide-divider h1,
@@ -175,14 +342,11 @@
   color: var(--blitzy-text-invert);
 }
 
-/* 3.3 Closing slide  —  navy background, short takeaway, brand lockup + bar */
+/* 3.3 Closing slide  —  navy background, short takeaway, brand lockup + bar.
+   Ground comes from data-background-color="#1A105F" (--blitzy-primary-navy,
+   byte-identical). See the note on .slide-title for why no `background` is declared. */
 .reveal .slides section.slide-closing {
-  background: var(--blitzy-primary-navy);
   color: var(--blitzy-text-invert);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
   text-align: left;
 }
 .reveal .slides section.slide-closing h1,
@@ -194,6 +358,37 @@
    on the navy closing ground is 16.36:1. Token value unchanged; opacity removed. */
 .reveal .slides section.slide-closing p,
 .reveal .slides section.slide-closing li { color: var(--blitzy-text-invert); }
+
+/* 3.4 Vertical centring for the title / divider / closing slide types.
+   F29-CENTRE-001: `display: flex` declared on the <section> itself is INERT - reveal.js
+   writes an INLINE `display` onto every section as it enters and leaves the view distance,
+   and an inline declaration beats any stylesheet rule short of `!important`. The measured
+   result was 47% / 74% / 55% of vertical void on the non-default slides. Rather than fight
+   reveal with `!important` (which would also break its show/hide contract), the CONSUMER
+   owns an inner `div.slide-body` wrapper that reveal never touches: it is the flex
+   container, and `min-height: 100%` lets it fill the section so `justify-content: center`
+   has a box to centre within.
+
+   SLIDE-BODY CONTRACT (consumers of this theme MUST honour it): every `.slide-title`,
+   `.slide-divider` and `.slide-closing` section wraps its content in
+   `<div class="slide-body"> ... </div>`. Verified content/box ratios 1.000061 / 1.052892 /
+   1.000047, and it survives ?print-pdf. */
+.reveal .slides section > .slide-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100%;
+}
+/* Components that are inline-level by design must keep their shrink-to-fit box once they
+   become flex items, or the eyebrow's chip background, the 160px accent bar and the brand
+   lockup would each stretch across the full content width. */
+.reveal .slide-body > .hero-icon,
+.reveal .slide-body > .eyebrow,
+.reveal .slide-body > .accent-bar,
+.reveal .slide-body > .brand-lockup { align-self: flex-start; }
+.reveal .slide-divider .slide-body > .hero-icon,
+.reveal .slide-divider .slide-body > .eyebrow,
+.reveal .slide-divider .slide-body > .accent-bar { align-self: center; }
 
 /* ---------------------------------------------------------------------------
  * 4. Component classes
@@ -235,10 +430,20 @@
   margin: 0.6em 0;
 }
 
-/* 4.3 KPI grid + cards */
+/* 4.3 KPI grid + cards
+   The column count is EXPLICIT, not `auto-fit` with a `minmax()` floor. reveal.js renders
+   its canvas at the configured 1920x1080 and then fits it to the window with a single CSS
+   transform, so a track list gated on available width resolves against the CANVAS and never
+   against the viewport: `auto-fit` always produced one row of N cards regardless of how
+   narrow the window was, and on a phone that row rendered as unreadable ~53px tiles that
+   collided with the slide's citation line. Fixed columns give a stable arrangement at every
+   scale and in every view mode (presentation, overview, scroll and print).
+   `minmax(0, 1fr)` rather than a bare `1fr`: the implicit minimum of `1fr` is `auto`
+   (min-content), which lets a track refuse to shrink and push the grid past the slide's
+   content box - clipping the last card's rounded corner at the canvas edge. */
 .reveal .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 28px;
   width: 100%;
   margin-top: 0.6em;
@@ -337,8 +542,30 @@
 .reveal .slide-divider .icon-row > *,
 .reveal .slide-closing .icon-row > * { color: rgba(255, 255, 255, 0.82); }
 
-/* Generic Lucide icon alignment helper */
-.reveal [data-lucide] { display: inline-flex; vertical-align: middle; }
+/* 4.7 Lucide placeholder sizing (F31-CLS-001 / F32-DEGRADE-001) - reserve the icon box
+   BEFORE hydration. `lucide.createIcons()` replaces each `<i data-lucide="...">`
+   placeholder with an <svg>. Until that runs the <i> is an empty inline element with NO
+   intrinsic size, so every icon box measures 0x0: the load produces layout shift and, under
+   a Lucide outage, the `.icon-row` collapses and pulls its labels up, orphaning words.
+   Because `[data-lucide]` is `display: inline-flex` it is an atomic inline-level box, so
+   width/height apply in every context. Each rule MIRRORS its sibling `svg` rule
+   value-for-value, which makes hydration a like-for-like swap: the box is identical before
+   and after, so nothing reflows and nothing disappears. */
+.reveal [data-lucide] {
+  display: inline-flex;
+  vertical-align: middle;
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+}
+.reveal .hero-icon [data-lucide] { width: 96px; height: 96px; }
+.reveal .icon-row [data-lucide] { width: 52px; height: 52px; }
+.reveal .kpi-icon [data-lucide] { width: 40px; height: 40px; }
+.reveal .brand-lockup [data-lucide] { width: 28px; height: 28px; }
+/* The two icon wrappers that are not already flex containers must become inline-flex so
+   the reserved placeholder box participates in layout identically to the <svg>. */
+.reveal .kpi-icon,
+.reveal .hero-icon { display: inline-flex; align-items: center; }
 
 /* ---------------------------------------------------------------------------
  * 5. Mermaid diagram container  —  centered, sized to fit 1920x1080, on-brand card
@@ -349,30 +576,147 @@
   justify-content: center;
   align-items: center;
   max-width: 100%;
-  max-height: 760px;
+  /* Height budget: the tallest diagram slide places the card at y~281 (eyebrow + h2 +
+   * a 3-line figure caption) inside a 1080px canvas whose content box ends at y=1016,
+   * less the card's 0.4em bottom margin => ~721px of room. 700px (card) and 660px
+   * (svg, + 2x16px card padding = 692px) both fit with headroom, and keep the card
+   * clear of an absolutely-positioned citation line. */
+  max-height: 700px;
   margin: 0.4em auto;
-  padding: 28px;
+  padding: 16px;
   overflow: hidden;
   background: var(--blitzy-surface-2);
   border: 1px solid var(--blitzy-border-soft);
   border-radius: 16px;
 }
+/* Before Mermaid replaces the <pre> content with an <svg>, the element still holds the
+ * raw diagram DSL, which the deck's 34px body type paints as pre-formatted text
+ * thousands of pixels wide. Keep it invisible until Mermaid stamps
+ * data-processed="true". visibility:hidden — NOT display:none or font-size:0 — is
+ * required, because Mermaid must still be able to lay the container out to measure
+ * into it. */
+.reveal .mermaid:not([data-processed="true"]) {
+  visibility: hidden;
+}
+/* AVAILABILITY CONTRACT (consumers MUST keep both halves of this).
+ *
+ * Part 1 — Mermaid unreachable. The guard above stops the raw DSL painting, but alone it
+ * leaves a 700px empty card mid-slide. Collapse the card and render a short on-brand note
+ * in its place, so the slide's heading, figure caption and citation stay in position.
+ * The initialisation script is responsible for stamping `mermaid-unavailable` on <html>
+ * and inserting one `.diagram-fallback` element before each `pre.mermaid`. Specificity is
+ * (0,3,1) against the guard's (0,3,0), so the two rules are order-independent. */
+html.mermaid-unavailable .reveal .mermaid {
+  display: none;
+}
+.reveal .slides section .diagram-fallback {
+  display: block;
+  max-width: 1500px;
+  margin: 0.4em auto;
+  padding: 14px 22px;
+  font-family: var(--ff-body);
+  font-size: 0.58em;
+  /* --blitzy-text, not --blitzy-text-muted: #999999 fails WCAG AA at this size on the
+     light content surface (same constraint as the figure caption). */
+  color: var(--blitzy-text);
+  background: var(--blitzy-surface-1);
+  border: 1px dashed var(--blitzy-border-soft);
+  border-radius: 16px;
+  text-align: center;
+}
+/* Part 2 — reveal.js never initialises. The reveal.js stylesheet hides every slide by
+ * default (`.reveal .slides>section{display:none}`) and only un-hides the one carrying
+ * `.present`, which nothing but Reveal.initialize() can assign. Any failure that stops
+ * initialize() running — a blocked reveal.js bundle, or a single unreachable ES module
+ * aborting the initialisation module — therefore leaves reveal.css loaded with every
+ * section display:none, i.e. a totally blank viewport, strictly worse than a full CDN
+ * outage. A classic (non-module) inline script must stamp `reveal-unavailable` on <html>
+ * when the deck has not reported ready, which these rules turn into a plain readable
+ * scrolling document. Specificity (0,3,1) plus !important overrides reveal.css's (0,2,1);
+ * the class is only ever applied after a demonstrated failure, so healthy loads never
+ * match it and there is no flash of unstyled slides. */
+html.reveal-unavailable .reveal .slides > section {
+  display: block !important;
+  position: relative !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: none !important;
+  height: auto !important;
+  min-height: 0;
+}
+html.reveal-unavailable .reveal .slides {
+  position: static;
+  height: auto;
+  pointer-events: auto;
+}
+/* Part 3 of the availability contract, and the half most easily forgotten. reveal.js is
+ * what CREATES the per-slide `.slide-background` divs that paint each section's
+ * data-background-color / data-background-gradient. Because the per-slide background
+ * system owns those grounds, the dark slide-type rules below carry NO background of their
+ * own — which is correct while reveal is alive, but means that when reveal never loads the
+ * title, divider and closing slides keep their light-on-dark text colours over the
+ * browser's default white canvas. Measured in that state: teal-on-white at 1.243:1, and
+ * white headings entirely invisible. These rules restore the same grounds directly on the
+ * sections, gated on html.reveal-unavailable so a healthy load never matches them and the
+ * per-slide background layer stays the single source of truth. Consumers MUST keep these
+ * in step with the data-background-* attribute literals they author on each section. */
+html.reveal-unavailable .reveal .slides > section.slide-title {
+  background-color: var(--blitzy-primary);
+  background-image: var(--gradient-hero);
+}
+html.reveal-unavailable .reveal .slides > section.slide-divider {
+  background-color: var(--blitzy-primary-dark);
+  background-image: var(--gradient-divider);
+}
+html.reveal-unavailable .reveal .slides > section.slide-closing {
+  background-color: var(--blitzy-primary-navy);
+}
 .reveal .mermaid svg {
   max-width: 100%;
-  max-height: 720px;
+  max-height: 660px;
   height: auto;
+}
+/* Diagram labels must be native SVG <text>/<tspan>, never HTML inside a
+ * <foreignObject> (set flowchart.htmlLabels = false AND the top-level
+ * htmlLabels = false in mermaid.initialize). reveal.js CSS-scales the whole slide
+ * canvas (transform: scale(Reveal.getScale())); Mermaid's HTML-label path measures
+ * each label THROUGH that transformed DOM, so the foreignObject width attribute comes
+ * out at (label offsetWidth x scale) while the label lays out at its unscaled width —
+ * every label ends up 1/scale too wide for its own box, overflowing and clipping.
+ * SVG text is measured with getBBox(), which reports untransformed user-space units,
+ * so layout is scale-invariant. Only font-family and weight are pinned here, to keep
+ * diagram type consistent with the deck's Inter body face. */
+.reveal .mermaid svg text,
+.reveal .mermaid svg .nodeLabel,
+.reveal .mermaid svg .edgeLabel,
+.reveal .mermaid svg .cluster-label {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 400;
+  letter-spacing: normal;
 }
 
 /* ---------------------------------------------------------------------------
  * 6. Styled tables  —  on-brand header + zebra rows for KPI/status tables
  * ------------------------------------------------------------------------- */
-.reveal table {
+/* F-HELP-016: scoped to `.reveal .slides section table`, NOT `.reveal table`. reveal.js
+   builds its keyboard-shortcut overlay as `.reveal > .overlay.overlay-help > ... > table`
+   — inside .reveal but OUTSIDE .slides — so the broader selector captured it and overrode
+   reveal's own overlay styling: `color: var(--blitzy-text)` (#333333) landed on the
+   overlay's rgba(0,0,0,0.95) ground for 1.614:1 against reveal's intended 20.396:1. Worse,
+   reveal emits bare <th> cells with no <tr>, so implicit-<tr> fixup made the header
+   nth-child(1) and pushed the un-zebra'd rows onto the odd indices, leaving 6 of 12
+   shortcut rows fully unreadable. Narrowing the scope returns the overlay to reveal's
+   stylesheet while every in-slide table keeps the full brand treatment. The DESCENDANT
+   combinator is deliberate: reveal re-parents sections into .pdf-page (print) and
+   .scroll-page-content (scroll view), both still inside .slides, so a child combinator
+   would silently drop this styling in those two view modes. */
+.reveal .slides section table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.62em;
   margin: 0.4em 0;
 }
-.reveal table th {
+.reveal .slides section table th {
   background: var(--blitzy-primary);
   color: var(--blitzy-text-invert);
   font-family: var(--ff-display);
@@ -380,12 +724,19 @@
   text-align: left;
   padding: 12px 18px;
 }
-.reveal table td {
+.reveal .slides section table td {
   padding: 10px 18px;
   border-bottom: 1px solid var(--blitzy-border);
   color: var(--blitzy-text);
 }
-.reveal table tr:nth-child(even) td { background: var(--blitzy-surface-1); }
+.reveal .slides section table tr:nth-child(even) td { background: var(--blitzy-surface-1); }
+
+/* F30-TABLE-001: an inline code chip carries a border and padding, so its line box exceeds
+   the row's line-height and the chip occludes the line above it. Scoped with `:has()` to
+   cells that actually contain a chip, so every other table keeps its verified row rhythm.
+   Scoped to `.reveal .slides section` with the rest of section 6 so it cannot leak into
+   reveal's own help overlay. */
+.reveal .slides section table td:has(code) { line-height: 1.6; }
 
 /* ---------------------------------------------------------------------------
  * 7. Inline code  —  Fira Code on a subtle surface (NO fenced code in slides)
@@ -423,6 +774,51 @@
   border-radius: 6px;
 }
 
+/* F33-TARGET-001 / F43-TARGET-001 - WCAG 2.5.5 Target Size (44x44). reveal.css sizes the
+   chevrons from `.controls { font-size: 10px }` and a 3.6em box, producing 36x36 against
+   the 44x44 floor. Raising the CLUSTER to 12.3px scales 3.6em to 44.28px and scales the
+   arrow glyph and every em-based offset with it, so the controls stay bottom-right and stay
+   perfectly centred inside their own box (a width/height override would leave the glyph
+   off-centre, because reveal positions the bars from the box's top-left corner). reveal's
+   pause-overlay "Resume presentation" button is a separate element measuring 184.09x34 -
+   wide enough, 10px short on height; `min-height` plus an explicit border-box and a
+   centring flex reaches the floor without depending on the resolved line-height of
+   whichever font actually loads, so the target still holds when the font CDN is
+   unavailable. Geometry only: reveal's own colour, border and radius are untouched (its
+   stock #CCCCCC label on the #000000 pause ground already measures 13.08:1). */
+.reveal .controls { font-size: 12.3px; }
+.reveal .resume-button {
+  box-sizing: border-box;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* F34-PROGRESS-001 - the progress fill inherited a colour matching the light content
+   ground (1.00:1), so only the grey remainder was perceptible and the indicator read
+   BACKWARDS. The deep-violet token gives 9.32:1 against the white surface and 5.81:1
+   against the track itself; the dark slide types keep the white fill (already 9.17:1
+   there) through the same `:has()` scope the control-glyph rules below use. The bar is also
+   clickable but had no affordance: reveal extends its 3px height with a 10px `::after` (a
+   13px band against the 24px floor of WCAG 2.5.8) and the element inherits `cursor: none`
+   from hideInactiveCursor. A 21px extension brings the band to exactly 24px and
+   `cursor: pointer` makes the target discoverable. Consumers that pin furniture along the
+   bottom edge must clear the enlarged band. Brand tokens only. */
+.reveal .progress {
+  color: var(--blitzy-primary-deep);
+  cursor: pointer;
+}
+.reveal .progress::after {
+  height: 21px;
+  top: -21px;
+}
+.reveal:has(section.present.slide-title) .progress,
+.reveal:has(section.present.slide-divider) .progress,
+.reveal:has(section.present.slide-closing) .progress {
+  color: var(--blitzy-text-invert);
+}
+
 /* F20-WCAG: reveal.js leaves the navigation-arrow glyphs a low-contrast grey that
    drops to ~1.1-2.7:1 over the dark title/divider/closing grounds (fails WCAG 1.4.11
    Non-text Contrast, >=3:1). Scope a token-based glyph colour to whichever dark
@@ -446,4 +842,52 @@
 .reveal:has(section.present.slide-divider) .controls button:disabled,
 .reveal:has(section.present.slide-closing) .controls button:disabled {
   color: var(--blitzy-text-muted);
+}
+/* F-HOVER-009: the three :has() hover rules above only fire on the dark slide types; on
+   light content slides reveal's own `.has-light-background .controls { color: #000 }`
+   applied to the rest AND hover states alike, so hovering a chevron produced no hue change
+   at all — only reveal's 0.9 -> 1 opacity step. This UNGATED rule gives every slide a
+   visible hover affordance: #000000 -> #5B39F3 is 6.32:1 on the white content ground, far
+   past the 3:1 non-text floor of WCAG 1.4.11. It is listed AFTER the dark rules but carries
+   lower specificity (0,2,1 vs their 0,3,2), so dark slides keep their #94FAD5 hover and
+   only the light slides pick this up. Brand token only; no token-value change. */
+.reveal .controls button:hover {
+  color: var(--blitzy-primary);
+}
+
+/* ---------------------------------------------------------------------------
+ * 9. Motion preferences
+ * ---------------------------------------------------------------------------
+ * This theme deliberately contains NO `max-width` media query. reveal.js renders its
+ * canvas at the configured size (1920x1080 for this deck) and fits it to the window with
+ * a single uniform CSS transform, so a device-width query and the canvas coordinate
+ * system are two different measuring systems: any rule gated on device width resizes one
+ * element while every neighbour continues to scale with the canvas. All sizing and
+ * spacing above is therefore expressed once, in canvas units, and the deck is fully
+ * scale-invariant - what is composed at 1920x1080 renders identically at every window
+ * size, projector and print target.
+ *
+ * `prefers-reduced-motion` is a USER PREFERENCE query rather than a device-geometry
+ * query, so it is both appropriate and required. reveal.js's `transition` CONFIG value is
+ * left untouched (the AAP fixes it at 'slide'); the animation is neutralised in CSS
+ * instead, so the mandated configuration and WCAG 2.1 SC 2.3.3 are both satisfied.
+ * Covers reveal's slide track, the section transforms, the per-slide background
+ * cross-fade, the auto-animate layer, the progress bar and the control-chevron fades. */
+@media (prefers-reduced-motion: reduce) {
+  .reveal .slides,
+  .reveal .slides section,
+  .reveal .slides > section,
+  .reveal .slides > section > section,
+  .reveal .backgrounds,
+  .reveal .backgrounds .slide-background,
+  .reveal .backgrounds .slide-background-content,
+  .reveal [data-auto-animate-target],
+  .reveal .progress span,
+  .reveal .controls button {
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

@@ -145,8 +145,13 @@ additional setup beyond the commands above:
   (`Source: .github/workflows/frontend-ci.yml:L18,L29,L40`), which installs
   strictly from a committed lockfile; but no `package-lock.json` is committed
   (`Source: frontend/ (no package-lock.json present)`), so a local `npm install`
-  must be run first to generate one. **Maturity: Provisioned** (dependencies
-  declared, lockfile absent).
+  must be run first to generate one. Neither workflow declares a working
+  directory either, so in CI `npm ci` runs at the repository root — where there
+  is no `package.json` — and fails before the lockfile is ever consulted
+  (`Source: .github/workflows/frontend-ci.yml:L18,L29,L40`, no
+  `working-directory` or `defaults` key). **Maturity: Provisioned**
+  (dependencies declared, lockfile absent) / **Designed** (working directory not
+  declared in either workflow).
 
 The authoritative Implemented / Provisioned / Designed matrix and the full defect
 catalog are maintained in

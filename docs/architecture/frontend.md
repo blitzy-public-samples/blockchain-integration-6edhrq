@@ -11,16 +11,25 @@ Every capability named on this page is tagged with the project-wide maturity dis
 - **Provisioned** — scaffolding or configuration exists, but the capability is not yet fully wired to run.
 - **Designed** — specified in the design corpus (`documentation/*.md`), not yet present in code.
 
-Two frontend-specific qualifications apply. First, the React component tree, the routing shell, the three registered Redux slices, and the three service modules are **source-present but non-buildable** (**Implemented-with-defects (source-present, non-buildable)**): the SPA does not compile today because it uses undeclared dependencies (`axios`, `zod`, `@reduxjs/toolkit`, `react-redux`), an `@/` path alias unsupported by `react-scripts`, absent store slices and absent store hooks, and named/default export mismatches — so no page renders at runtime. Specific broken store and utility references are called out below as **source-present defects** rather than hidden. Second, the visual styling of the UI is **Designed** only — the Technical Specification describes a "React with Tailwind CSS" frontend, but `frontend/package.json` declares no Tailwind dependency and the source tree contains zero `.css` files, so components carry `className` hooks with no accompanying stylesheet today. `Source: frontend/package.json`, `Source: documentation/Technical Specifications.md:§TECHNOLOGY STACK`.
+Two frontend-specific qualifications apply. First, the React component tree, the routing shell, the three registered Redux slices, and the three service modules are **source-present but non-buildable** (**Implemented-with-defects (source-present, non-buildable)**): the SPA does not compile today because it uses undeclared dependencies (`axios`, `zod`, `@reduxjs/toolkit`, `react-redux`), an `@/` path alias unsupported by `react-scripts`, absent store slices and absent store hooks, and named/default export mismatches — so no page renders at runtime. Specific broken store and utility references are called out below as **source-present defects** rather than hidden. Second, the visual styling of the UI is **Designed** only — the design corpus describes the frontend as "React with Tailwind CSS" `Source: documentation/Software Requirements Specifications (SRS).md:L339`, but `frontend/package.json` declares no Tailwind dependency and the source tree contains zero `.css` files, so components carry `className` hooks with no accompanying stylesheet today. The Technical Specification records the same conclusion, labeling Tailwind a design-time proposal that is not a declared or installed dependency. `Source: frontend/package.json`, `Source: documentation/Technical Specifications.md:§TECHNOLOGY STACK`.
 
 ## Fig A3 — Frontend Component & State Architecture
 
-**Fig A3 — Frontend Component & State Architecture** maps the React application shell to its five routed pages, the eight shared components, the three registered Redux slices, and the three service modules. It deliberately renders the two broken store references — `analyticsSlice` and `signatureSlice` — as dashed nodes so that the difference between what is wired and what is merely referenced is legible at a glance. The figure is the frontend counterpart to the backend before/after pair in [`overview.md`](overview.md); it is referenced by name from the [Known Gaps and Divergences](#known-gaps-and-divergences) section below and re-expressed in the executive summary deck ([`../../blitzy-deck/executive-summary.html`](../../blitzy-deck/executive-summary.html)).
+**Fig A3 — Frontend Component & State Architecture** maps the React application shell to its five routed pages, the eight shared components, the three registered Redux slices, and the three service modules. It deliberately renders the two broken store references — `analyticsSlice` and `signatureSlice` — as dashed nodes so that the difference between what is wired and what is merely referenced is legible at a glance. The figure is the frontend counterpart to the backend before/after pair in [`overview.md`](overview.md), and it is referenced by name from the [Known Gaps and Divergences](#known-gaps-and-divergences) section below. Fig A3 is authored here only: the executive summary deck ([`../../blitzy-deck/executive-summary.html`](../../blitzy-deck/executive-summary.html)) re-expresses the backend and operations figures (**Fig A1**, **Fig A2**, **Fig O1**, and **Fig O2**) rather than this frontend graph, so this page is the single home for the component-and-state view.
 
 **Figure A3 — Frontend Component & State Architecture (React 18 + TypeScript, as-wired today)**
 
 ```mermaid
 flowchart TD
+    %% Cluster-caption budget: Mermaid wraps a subgraph caption on its own internal
+    %% ~200px band (the inner div carries max-width:200px) which flowchart.wrappingWidth
+    %% does NOT widen, and it reserves only ONE caption line before the first child row.
+    %% Measured in Mermaid 11.4.0: clearance = 13.5 - 24 x (lines - 1) user units, so a
+    %% two-line caption already paints over the first node. Browser-measured on a 20px
+    %% sans ramp as well: a 17-character caption stays on one line, 21 characters wrap.
+    %% Keep every caption to ONE line -- at most ~17 characters and no em dash. The
+    %% detail these captions used to carry is stated in the legend keys and in the
+    %% cited prose around this figure.
     subgraph Legend_A3["Legend"]
         LG1["Solid box = source-present module (SPA does NOT build today)"]
         LG2["Dashed box = referenced but ABSENT (broken import)"]
@@ -35,7 +44,7 @@ flowchart TD
     App --> SigPg["SignatureManagement"]
     App --> Ana["Analytics"]
 
-    subgraph Comp["Shared Components (8)"]
+    subgraph Comp["Components (8)"]
         Header["Header"]
         Sidebar["Sidebar"]
         Chart["Chart"]
@@ -46,7 +55,7 @@ flowchart TD
         SigReq["SignatureRequest"]
     end
 
-    subgraph Slices["Registered Redux Slices"]
+    subgraph Slices["Registered slices"]
         VaultSlice["vaultSlice"]
         TxSlice["transactionSlice"]
         UserSlice["userSlice"]
@@ -152,6 +161,66 @@ The Redux store is assembled by a single `configureStore` call that registers ex
 Critically, the store registers no `analytics` reducer and no `signature` reducer, so the `state.analytics.data` read in `Analytics` and the `signatureSlice` dispatches in `SignatureRequest` and `SignatureManagement` resolve against slices that are never mounted (**source-present defect**). `Source: frontend/src/store/index.ts:L8-L12`, `Source: frontend/src/pages/Analytics.tsx:L15`, `Source: frontend/src/components/SignatureRequest.tsx:L3`.
 
 
+## Client-Side Validation (Zod Schemas)
+
+Three schema modules under `frontend/src/schema` declare the client-side validation contract, one per domain resource. Each module defines a TypeScript class whose constructor assigns a `z.object({ … })` to a public `schema` field. `Source: frontend/src/schema/transaction.ts:L3-L16`, `Source: frontend/src/schema/user.ts:L3-L14`, `Source: frontend/src/schema/vault.ts:L3-L14`. All three are **source-present but non-buildable**: each imports `zod`, which `frontend/package.json` does not declare, so no schema module resolves. `Source: frontend/src/schema/transaction.ts:L1`, `Source: frontend/src/schema/user.ts:L1`, `Source: frontend/src/schema/vault.ts:L1`, `Source: frontend/package.json:L5-L19`.
+
+Two further facts qualify the maturity of client-side validation, and both are load-bearing. First, **no module under `frontend/src` imports any of the three schemas** — they are declared but never consumed, so even once the build blockers are resolved no Zod validation would run. Second, the only input validation actually wired into a component is hand-rolled: `TransactionForm` checks the amount inline and the recipient address with `isValidEthereumAddress`/`isValidXRPAddress` from `utils/validators`, and never references `TransactionSchema`. `Source: frontend/src/components/TransactionForm.tsx:L4,L23-L28`, `Source: frontend/src/utils/validators.ts:L8,L16`. Zod-enforced validation is therefore **Designed** in effect — the schema source exists, but nothing enforces it. The three modules deliberately do **not** appear in **Fig A3**: nothing imports them, so there is no import or dispatch edge to draw, and their absence from the component-and-state graph is itself the finding.
+
+| Schema module | Declared symbol | Exported? | Mirrors backend entity | Maturity |
+|---------------|-----------------|-----------|------------------------|----------|
+| `schema/transaction.ts` | `TransactionSchema` | Yes (`export class`) | `db.Transaction` | Source-present (non-buildable); never imported |
+| `schema/user.ts` | `UserSchema` | Yes (`export class`) | `db.User` | Source-present (non-buildable); never imported |
+| `schema/vault.ts` | `VaultSchema` | **No** — module-private | `db.Vault` | Source-present defect (unimportable); never imported |
+
+`Source: frontend/src/schema/transaction.ts:L3`, `Source: frontend/src/schema/user.ts:L3`, `Source: frontend/src/schema/vault.ts:L3`.
+
+### `TransactionSchema` fields
+
+| Field | Zod validator | Backend counterpart | Note |
+|-------|---------------|---------------------|------|
+| `id` | `z.string()` | `ID uuid.UUID` | No UUID format check on the client |
+| `vaultId` | `z.string()` | `VaultID uuid.UUID` | No UUID format check on the client |
+| `status` | `z.enum(['Pending','Completed','Failed'])` | `Status string` (`Pending` / `Processed`) | Vocabulary divergence — see below |
+| `blockchainType` | `z.enum(['XRP','Ethereum'])` | `BlockchainType string` (unconstrained) | Enumeration exists only client-side |
+| `txHash` | `z.string()` | `TxHash string` | — |
+| `amount` | `z.number()` | `Amount decimal.Decimal` | Client narrows an arbitrary-precision decimal to a JS number |
+| `createdAt` | `z.string().datetime()` | `CreatedAt time.Time` | ISO-8601, no precision constraint |
+
+`Source: frontend/src/schema/transaction.ts:L8-L14`, `Source: backend/internal/db/schema.go:L44-L56`. The backend's `UserID`, `Metadata`, and `UpdatedAt` fields have no client-side counterpart.
+
+### `UserSchema` fields
+
+| Field | Zod validator | Backend counterpart | Note |
+|-------|---------------|---------------------|------|
+| `id` | `z.string()` | `ID uuid.UUID` | No UUID format check on the client |
+| `username` | `z.string()` | `Username string` | — |
+| `email` | `z.string().email()` | `Email string` | Format check exists only client-side |
+| `role` | `z.enum(['Admin','Manager','Operator','Auditor'])` | `Role string` (unconstrained) | **Omits `API User`** — four of the five documented roles |
+| `createdAt` | `z.string().datetime({ precision: 3 })` | `CreatedAt time.Time` | Millisecond precision required |
+
+`Source: frontend/src/schema/user.ts:L8-L12`, `Source: backend/internal/db/schema.go:L20-L30`. The backend's `OrganizationID`, `PasswordHash`, and `UpdatedAt` fields have no client-side counterpart: omitting `PasswordHash` is correct — a password hash must never reach the client — but omitting `OrganizationID` drops the multi-tenancy key that the vault and transaction flows scope on.
+
+### `VaultSchema` fields
+
+| Field | Zod validator | Backend counterpart | Note |
+|-------|---------------|---------------------|------|
+| `id` | `z.string()` | `ID uuid.UUID` | No UUID format check on the client |
+| `name` | `z.string()` | `Name string` | — |
+| `blockchainType` | `z.enum(['XRP','Ethereum'])` | `BlockchainType string` (unconstrained) | Enumeration exists only client-side |
+| `address` | `z.string()` | `Address string` | No chain-specific address check in the schema |
+| `createdAt` | `z.string().datetime({ precision: 3 })` | `CreatedAt time.Time` | Millisecond precision required |
+
+`Source: frontend/src/schema/vault.ts:L8-L12`, `Source: backend/internal/db/schema.go:L32-L42`. The backend's `OrganizationID`, `Metadata`, and `UpdatedAt` fields have no client-side counterpart.
+
+### Divergences carried by the schemas
+
+- **Role enumeration — four client values versus five documented roles (source-present defect).** `UserSchema` validates `role` against `['Admin','Manager','Operator','Auditor']`, omitting `API User`, whereas the design corpus and this documentation set both define a five-role RBAC model. `Source: frontend/src/schema/user.ts:L11`, `Source: documentation/Technical Specifications.md:L494-L498`, [`../security/security-model.md`](../security/security-model.md). A user whose role is `API User` would therefore fail client-side validation while remaining valid on the backend, where `Role` is an unconstrained `string` with no enumeration, check constraint, or middleware enforcement. `Source: backend/internal/db/schema.go:L27`. Because RBAC enforcement is itself **Designed** — the auth middleware is absent — the divergence is latent rather than active today, and it is cataloged in [`scaffold-vs-design.md`](scaffold-vs-design.md).
+- **`VaultSchema` is declared without `export` (source-present defect).** `vault.ts` declares `class VaultSchema`, while its two siblings declare `export class`, so the vault contract is module-private and no consumer can import it. `Source: frontend/src/schema/vault.ts:L3`, `Source: frontend/src/schema/transaction.ts:L3`, `Source: frontend/src/schema/user.ts:L3`. Because the class is also never referenced inside its own module and `frontend/tsconfig.json` sets `noUnusedLocals: true`, the declaration is additionally reported as an unused local during type-checking. `Source: frontend/tsconfig.json:L15`.
+- **Identifiers are plain strings.** All three schemas type `id` — and `TransactionSchema` also types `vaultId` — as `z.string()` with no UUID validator, while every backend entity keys on `uuid.UUID`. `Source: frontend/src/schema/vault.ts:L8`, `Source: frontend/src/schema/transaction.ts:L8-L9`, `Source: backend/internal/db/schema.go:L34`. A malformed identifier passes client validation and is rejected only at the database boundary; the backend's own identifier conflict is covered by the dual-identifier note in [`data-model.md`](data-model.md).
+- **Chain enumerations and address formats live only on the client.** `blockchainType` is constrained to `XRP` / `Ethereum` in both `VaultSchema` and `TransactionSchema`, but the corresponding backend fields are plain unconstrained strings, so the enumeration is **Designed** on the server. `Source: frontend/src/schema/vault.ts:L10`, `Source: frontend/src/schema/transaction.ts:L11`, `Source: backend/internal/db/schema.go:L37,L50`. Chain-specific address validation exists separately in `utils/validators` and is not referenced by any schema. `Source: frontend/src/utils/validators.ts:L8,L16`, `Source: frontend/src/schema/vault.ts:L11`.
+- **Transaction status vocabulary and amount typing.** `TransactionSchema` validates `Pending` / `Completed` / `Failed` against a backend that produces only `Pending` / `Processed`, and types `amount` as a number against a `decimal.Decimal` that serializes as a JSON string. Both divergences are detailed in [API path and status vocabulary divergences](#api-path-and-status-vocabulary-divergences-note) below and in [`../api-reference/transactions.md`](../api-reference/transactions.md). `Source: frontend/src/schema/transaction.ts:L10,L13`, `Source: backend/internal/db/schema.go:L52`.
+
 ## Known Gaps and Divergences
 
 The frontend scaffold is **source-present but non-buildable** as a component tree and routing shell, and it carries concrete defects and cross-boundary divergences. Consistent with the documentation-only scope of this deliverable, each is **documented, not fixed**; the code is left unmodified. The consolidated Implemented / Provisioned / Designed reconciliation is maintained in [`scaffold-vs-design.md`](scaffold-vs-design.md), and the resource-path contract is authoritative in [`../api-reference/overview.md`](../api-reference/overview.md).
@@ -172,9 +241,24 @@ The Axios client calls plural resource paths — `GET /vaults`, `POST /transacti
 
 Three service modules import from utility modules that do not exist. `websocket.ts` and `api.ts` import `getAuthToken` from `utils/auth`, and `auth.ts` imports `setItem`/`getItem`/`removeItem` from `utils/storage`, but the `frontend/src/utils` directory contains only `formatters.ts` and `validators.ts`. `Source: frontend/src/services/websocket.ts:L1`, `Source: frontend/src/services/api.ts:L2`, `Source: frontend/src/services/auth.ts:L2`. Consequently, token retrieval and JWT persistence have no backing implementation today (**source-present defect**).
 
+### Create React App HTML shell carries another product's branding (source-present defect)
+
+The Create React App HTML shell that hosts the SPA is not this product's shell. `frontend/public/index.html` sets the document title to `Collaborative Task Manager` and the `description` meta tag to `Collaborative Task Management Application` — neither names the Blockchain Integration Service and Dashboard, and both are leftovers from an unrelated application. `Source: frontend/public/index.html:L7,L9`. The same shell links a favicon at `%PUBLIC_URL%/favicon.ico`, but `frontend/public/` contains `index.html` and nothing else, so that request would return 404 once the app is served. `Source: frontend/public/index.html:L8`. Neither issue is compile-blocking — Create React App copies `public/` through to the build output verbatim — so the defect surfaces in the browser tab, the document metadata, and any link preview or crawler that reads the `description`, rather than at build time. Consistent with the documentation-only scope, both are **documented, not fixed**; they are cataloged as Defect 13 in [`scaffold-vs-design.md`](scaffold-vs-design.md).
+
 ### Additional verified scaffold defects (note)
 
 Two further inconsistencies were confirmed first-hand while mapping the shell and services, and are recorded here for completeness. First, `app.tsx` imports `AuthProvider` from `@/services/auth`, but `auth.ts` exports only `login`, `logout`, and `isAuthenticated` — no `AuthProvider` symbol is defined. `Source: frontend/src/app.tsx:L12`, `Source: frontend/src/services/auth.ts:L4-L43` (**source-present defect**). Second, `auth.ts` imports `createApiInstance` from `api.ts`, yet `api.ts` declares `createApiInstance` as a non-exported local constant and exports only `getVaults`, `createTransaction`, and `getSignatureStatus`. `Source: frontend/src/services/auth.ts:L1`, `Source: frontend/src/services/api.ts:L6`, `Source: frontend/src/services/api.ts:L32-L44` (**source-present defect**). Finally, several runtime libraries the source imports — `@reduxjs/toolkit`, `react-redux`, `chart.js`, `react-chartjs-2`, `zod`, and `axios` — are not declared in `frontend/package.json`, which lists only `react`, `react-dom`, `react-router-dom`, `react-scripts`, and testing utilities. `Source: frontend/package.json` (**Designed** dependency reconciliation pending). These are documented here and reconciled in [`scaffold-vs-design.md`](scaffold-vs-design.md).
+
+### Stale product identity and absent CRA public assets (source-present defects)
+
+The static shell that Create React App serves for every route is `frontend/public/index.html`, and it still carries the identity of an **entirely different product**: its description reads `Collaborative Task Management Application` and its title is `Collaborative Task Manager` — no mention of vaults, blockchain, or this dashboard. `Source: frontend/public/index.html:L7,L9`. This is not a cosmetic detail confined to source: the CRA dev server serves this shell verbatim (with the bundle `<script>` tag injected), so it is the title a developer sees in the browser tab, and the description a crawler or link preview would read, on **every** route — including while the bundle is failing to compile. `Source: frontend/public/index.html:L1-L15`, `Source: frontend/package.json:L21`.
+
+The same directory is missing the rest of the standard CRA public set. `frontend/public/` contains **only** `index.html` (508 bytes); `favicon.ico`, `manifest.json`, `robots.txt`, and the `logo*.png` images are all absent. `Source: frontend/public/ (single file: index.html)`. Two consequences follow, and the second is the misleading one:
+
+- The shell requests an icon that does not exist — `<link rel="icon" href="%PUBLIC_URL%/favicon.ico" />`. `Source: frontend/public/index.html:L8`.
+- Because the dev server answers unknown paths with the SPA history fallback, `GET /favicon.ico` returns **HTTP 200** with `Content-Type: text/html` and the same shell bytes as `/` (identical `ETag`) rather than a 404. A reader checking status codes sees `200` and may conclude the asset exists; the browser receives HTML where an icon is expected and renders **no** site icon. The absent `manifest.json` is likewise never linked from the shell, so there is no web-app manifest, and no `robots.txt` is published.
+
+**Maturity: Source-present defect** for the stale identity (the file exists and is served, with the wrong content) and **Designed** for the absent assets (retitling the shell to this product, supplying `favicon.ico`/`manifest.json`/`robots.txt`/logo images, and adding the `<link rel="manifest">` reference). Consistent with the documentation-only scope, both are **documented here, not fixed** — `frontend/public/index.html` is unmodified. They are catalogued as Defect 13 in [`scaffold-vs-design.md`](scaffold-vs-design.md#defect-catalog), and the runtime behavior a developer observes is described in [`../getting-started/local-development.md`](../getting-started/local-development.md#frontend-development-workflow-react--cra).
 
 ## Monitoring & Analytics (MA-001) — Feature Status and User Guidance
 
@@ -193,7 +277,7 @@ For the step-by-step monitoring-and-analytics user workflow and troubleshooting,
 
 ## Documentation & Training Index
 
-New engineers and operators onboard through the guides below; each is task-oriented (setup, usage, troubleshooting) and labels every capability with its maturity. This index is the training map for the five SRS features and the onboarding/deployment paths until the planned root navigation page (`docs/index.md`) is published.
+New engineers and operators onboard through the guides below; each is task-oriented (setup, usage, troubleshooting) and labels every capability with its maturity. This index is the frontend-side training map for the five SRS features and the onboarding/deployment paths; the documentation set's root navigation page, [`../index.md`](../index.md), is the published entry point that indexes every section.
 
 | Audience task | Guide | Feature / Area |
 |---------------|-------|----------------|

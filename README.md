@@ -39,8 +39,8 @@ This repository contains **no Hyperledger Fabric, no Solidity, and no GraphQL** 
 
 ### Prerequisites
 
-- **Go** — to reproduce backend CI *exactly*, use the pinned Go **1.20** (this specific line is end-of-life and is stated only to match CI, not as a recommended runtime). `Source: .github/workflows/backend-ci.yml:L17` For local work on a supported runtime, use a current Go release; note the backend does not build regardless (no `go.mod`).
-- **Node.js with npm** — to reproduce frontend CI *exactly*, use the pinned Node **14.x** (also end-of-life; stated only to match CI). `Source: .github/workflows/frontend-ci.yml:L17` For local work on a supported runtime, use a current Node LTS; note the frontend does not build regardless (undeclared dependencies and absent modules).
+- **Go** — to reproduce backend CI *exactly*, use the pinned Go **1.20** (this specific line is end-of-life and is stated only to match CI, not as a recommended runtime). `Source: .github/workflows/backend-ci.yml:L17` For local work on a supported runtime, use a release inside Go's two-newest-majors support window — **Go 1.25 or 1.26 as verified on 2026-07-22** (`Source: go.dev/doc/devel/release`); note the backend does not build regardless (no `go.mod`).
+- **Node.js with npm** — to reproduce frontend CI *exactly*, use the pinned Node **14.x** (also end-of-life; stated only to match CI). `Source: .github/workflows/frontend-ci.yml:L17` For local work on a supported runtime, use an LTS still inside its support window — **Node 24 (Active LTS) or Node 22 (Maintenance LTS) as verified on 2026-07-22**, Node 20 having reached end-of-life on 2026-04-30 (`Source: nodejs.org/en/about/previous-releases`); note the frontend does not build regardless (undeclared dependencies and absent modules).
 - **PostgreSQL** — the **Designed** primary datastore (connection code is source-present but non-buildable). `Source: backend/internal/db/postgres.go:L15-L18`
 - **Redis** — the **Designed** cache and async status store (connection code is source-present but non-buildable). `Source: backend/internal/db/redis.go:L14-L18`
 
@@ -48,11 +48,11 @@ This repository contains **no Hyperledger Fabric, no Solidity, and no GraphQL** 
 
 Clone the repository, then set up each track independently.
 
-> **Note:** the clone URL below is a **placeholder** — replace `<your-org>/<your-repo>` with the actual repository location. It is not a real, resolvable URL.
+> **Note:** the clone URL below is a **placeholder** — replace `your-org` with your GitHub organization and `blockchain-integration-service` with the actual repository name. It is not a real, resolvable URL. These placeholders are deliberately written **without angle brackets**, because *unquoted* `<` and `>` are shell redirection operators: a copied `cd <your-repo>` does not fail with a helpful "replace me" message — it fails with an opaque `syntax error near unexpected token` (bash reporting the stray `>`), sending readers hunting for a shell bug instead of substituting a value. The `git clone` line is no better: its brackets are parsed as redirections, so the clone silently never runs. (Angle brackets remain safe *inside quotes*, which is why the API examples can write `-H "Authorization: Bearer <token>"`.) The same bare-placeholder convention is used in [Installation](docs/getting-started/installation.md#get-the-code).
 
 ```bash
-git clone https://github.com/<your-org>/<your-repo>.git
-cd <your-repo>
+git clone https://github.com/your-org/blockchain-integration-service.git
+cd blockchain-integration-service
 ```
 
 **Backend (Go).** Build and test with the standard Go toolchain. `Source: .github/workflows/backend-ci.yml:L19,L30`
@@ -66,7 +66,7 @@ go build ./...   # Note: no go.mod is committed, so this is a scaffold and will 
 
 ```bash
 cd frontend
-npm install   # Note: no package-lock.json is committed, so CI's `npm ci` cannot run; and this alone will NOT make the app build
+npm install   # Note: no lockfile is committed, and CI runs npm ci from the repo root (no package.json there), so CI cannot install; this alone will NOT make the app build
 ```
 
 ### Configuration
@@ -88,7 +88,7 @@ go run ./cmd/server   # Note: scaffold — requires a go.mod and the currently-a
 
 ```bash
 cd frontend
-npm start   # Note: will NOT serve until the frontend compile blockers (see Installation) are resolved
+npm start   # Note: dev server starts, but will NOT serve a dashboard until the compile blockers (see Installation) are resolved
 ```
 
 ## Project Status
@@ -110,9 +110,9 @@ Full documentation lives in the [`docs/`](docs/index.md) tree:
 - **[Architecture Overview](docs/architecture/overview.md)** — current-vs-target (before/after) architecture diagrams
 - **[API Reference](docs/api-reference/overview.md)** — all 18 endpoints, plus the machine-readable [OpenAPI specification](docs/api-reference/openapi.yaml)
 - **[Observability](docs/operations/observability.md)** — logging, tracing, metrics, health checks, and the dashboard template
-- **[System Administration](docs/operations/system-administration.md)** — consolidated operator/admin guide (configuration, deployment, database, backup, monitoring, security, incident response)
+- **[System Administration](docs/operations/system-administration.md)** — consolidated operator/admin guide (configuration, deployment, database, backup, monitoring, security, incident response); fulfills Software Project Proposal DELIVERABLES item 6 `Source: documentation/Software Project Proposal.md:L401-L402`
 - **[Security Model](docs/security/security-model.md)** — RBAC, JWT, MFA, and encryption
-- **[Training Materials](docs/training/training-materials.md)** — role-based onboarding course and written guides for common operations
+- **[Training Materials](docs/training/training-materials.md)** — role-based onboarding course and written guides for common operations; fulfills Software Project Proposal DELIVERABLES item 10 `Source: documentation/Software Project Proposal.md:L419-L421`
 - **[Scaffold vs. Design Reconciliation](docs/architecture/scaffold-vs-design.md)** — the honest maturity matrix
 - **[Executive Summary](blitzy-deck/executive-summary.html)** — a self-contained presentation for leadership
 

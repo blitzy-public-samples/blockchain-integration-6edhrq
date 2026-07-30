@@ -12,13 +12,22 @@ Following the rule's discipline, each pillar first states **what source-present 
 
 ```mermaid
 flowchart LR
+    %% Cluster-caption budget: Mermaid wraps a subgraph caption on its own internal
+    %% ~200px band (the inner div carries max-width:200px) which flowchart.wrappingWidth
+    %% does NOT widen, and it reserves only ONE caption line before the first child row.
+    %% Measured in Mermaid 11.4.0: clearance = 13.5 - 24 x (lines - 1) user units, so a
+    %% two-line caption already paints over the first node. Browser-measured on a 20px
+    %% sans ramp as well: a 17-character caption stays on one line, 21 characters wrap.
+    %% Keep every caption to ONE line -- at most ~17 characters and no em dash. The
+    %% detail these captions used to carry is stated in the legend keys and in the
+    %% cited prose around this figure.
     subgraph Legend_O1["Legend"]
         LG1["Solid box = source-present call site (non-buildable; no emission today)"]
         LG2["Dashed box = imported but ABSENT (does not compile)"]
         LG3["Rounded box = Designed / added (absent today)"]
     end
 
-    subgraph Current["Current - Source-present (non-buildable; no emission today)"]
+    subgraph Current["Current"]
         direction TB
         C_API["Gin router: gin.Logger()+gin.Recovery() call sites (api pkg non-buildable)"]
         C_WORK["Task workers: logger.Error(...) call sites (need ABSENT pkg/logger)"]
@@ -31,7 +40,7 @@ flowchart LR
         C_WORK -.->|"depends on"| C_LOGGER
     end
 
-    subgraph Designed["Designed - Target (added, absent today)"]
+    subgraph Designed["Designed"]
         direction TB
         D_MW(["Correlation-ID middleware (request_id propagation)"])
         D_TRACE(["OpenTelemetry distributed tracing across service boundaries"])
@@ -57,7 +66,7 @@ Sources for `Fig O1`: `Source: backend/internal/api/routes.go:L13-L14` (Gin logg
 
 ## Pillar 1 — Structured logging with correlation IDs
 
-**Reused (source-present, non-buildable).** The Gin router contains `gin.Logger()` and `gin.Recovery()` middleware *call sites* `Source: backend/internal/api/routes.go:L13-L14`. These would emit an access log line per request and recover from panics *if the code ran*, but the `api` package does not compile today — it imports the absent `internal/api/middleware` package `Source: backend/internal/api/routes.go:L6` and references handler methods that are not defined — so no access log is emitted and the on-disk log format and destination cannot be verified. Both background processors likewise contain `logger.Error(...)` call sites on their error paths only `Source: backend/internal/tasks/transaction_processor.go:L26,L44,L50,L57`, `Source: backend/internal/tasks/signature_processor.go:L25,L42,L48,L53,L57`; these call the **absent** `backend/pkg/logger` package `Source: backend/internal/tasks/transaction_processor.go:L10`, so they do not compile and emit nothing today, and there is no success/heartbeat log on the non-error path. The frontend contains `console.*` call sites (no structured logger), but the SPA also does not build. The design intent for a structured backend logger is Logrus `Source: documentation/Technical Specifications.md:§FRAMEWORKS AND LIBRARIES`. In short: the logging *call sites* are source-present, but no log line — structured or otherwise — is emitted to stdout or anywhere else at this checkpoint.
+**Reused (source-present, non-buildable).** The Gin router contains `gin.Logger()` and `gin.Recovery()` middleware *call sites* `Source: backend/internal/api/routes.go:L13-L14`. These would emit an access log line per request and recover from panics *if the code ran*, but the `api` package does not compile today — it imports the absent `internal/api/middleware` package `Source: backend/internal/api/routes.go:L6` and references handler methods that are not defined — so no access log is emitted and the on-disk log format and destination cannot be verified. Both background processors likewise contain `logger.Error(...)` call sites on their error paths only `Source: backend/internal/tasks/transaction_processor.go:L26,L44,L50,L57`, `Source: backend/internal/tasks/signature_processor.go:L25,L42,L48,L53,L57`; these call the **absent** `backend/pkg/logger` package `Source: backend/internal/tasks/transaction_processor.go:L10`, so they do not compile and emit nothing today, and there is no success/heartbeat log on the non-error path. The frontend contains `console.*` call sites rather than a structured logger — for example the login failure path logs through `console.error` `Source: frontend/src/services/auth.ts:L14` — but the SPA also does not build, so nothing reaches the browser console either; the build blockers are enumerated in [Monitoring & Analytics (MA-001)](#monitoring--analytics-ma-001) below. The design intent for a structured backend logger is Logrus `Source: documentation/Technical Specifications.md:§FRAMEWORKS AND LIBRARIES`. In short: the logging *call sites* are source-present, but no log line — structured or otherwise — is emitted to stdout or anywhere else at this checkpoint.
 
 **Added (Designed).** Correlation-ID propagation does not exist today: no middleware assigns or forwards a `request_id`/`X-Request-ID`, so logs cannot be correlated across the router and workers. **Caveat:** `pkg/logger` is imported by the composition root and both processors but the package directory is absent `Source: backend/cmd/server/main.go:L10`, so even the source-present worker logging cannot compile until the package exists. The design adds a correlation-ID middleware and a shared structured logger.
 
@@ -80,11 +89,11 @@ Per the AAP these are **documented, not fixed** (no source code is modified); th
 
 ## Pillar 2 — Distributed tracing
 
-**Reused (source-present).** None. There is no tracing instrumentation in the codebase today.
+**Reused (source-present).** None. There is no tracing instrumentation anywhere in the codebase today, and the absence is visible at every layer that would have to carry a span: the router installs only `gin.Logger()` and `gin.Recovery()` and registers no tracing middleware, exporter, or propagator across any of its 18 routes `Source: backend/internal/api/routes.go:L9-L54`; the composition root's import block declares no tracing or OpenTelemetry package `Source: backend/cmd/server/main.go:L3-L13`; and the frontend declares no tracing, RUM, or error-reporting dependency `Source: frontend/package.json:L1-L45`.
 
-**Added (Designed).** OpenTelemetry tracing spanning the HTTP handler, the core service, and the custodian/blockchain adapters, so a transaction or signature can be followed across service boundaries. Trace error rate is surfaced by a Designed panel in `dashboard-template.json`.
+**Added (Designed).** OpenTelemetry tracing spanning the HTTP handler, the core service, and the custodian/blockchain adapters, so a transaction or signature can be followed across service boundaries. Two of those boundaries do not exist yet either — `internal/blockchain` and `internal/custodian` are imported by the composition root but absent from the tree `Source: backend/cmd/server/main.go:L8-L9` — so the outbound spans have no adapter to instrument until those packages ship. Trace error rate is surfaced by a Designed panel in [`dashboard-template.json`](dashboard-template.json).
 
-**Local verification.** `grep -rn "otel\|opentelemetry\|trace" backend` returns no matches today, confirming tracing is absent (Designed).
+**Local verification.** `grep -rn "otel\|opentelemetry\|trace" backend` returns no matches today, confirming tracing is absent (Designed) `Source: backend/internal/api/routes.go:L9-L54`. `grep -inE "otel|opentelemetry|sentry|datadog|rum" frontend/package.json` likewise returns nothing, confirming the browser side is uninstrumented `Source: frontend/package.json:L1-L45`.
 
 ## Pillar 3 — Metrics endpoint
 
@@ -100,15 +109,17 @@ Per the AAP these are **documented, not fixed** (no source code is modified); th
 
 **Added (Designed).** A liveness `/health` endpoint and a readiness `/ready` endpoint that composes the PostgreSQL and Redis pings, plus a container-level `HEALTHCHECK`. The backend Dockerfile only exposes a port and defines no `HEALTHCHECK` `Source: infrastructure/docker/Dockerfile.backend:L20`; the frontend Dockerfile has the same gap `Source: infrastructure/docker/Dockerfile.frontend:L26`.
 
-**Local verification.** `grep -n "health\|ready" backend/internal/api/routes.go` returns nothing (Designed). `grep -n "HEALTHCHECK" infrastructure/docker/Dockerfile.backend infrastructure/docker/Dockerfile.frontend` returns nothing, confirming the container health-check gap.
+**Added (Designed) — graceful shutdown and traffic drain.** A readiness endpoint only drains traffic if it flips to *not ready* **before** the process stops accepting work, so `/ready` must be paired with signal-aware shutdown. The designed sequence is: on `SIGTERM`, fail `/ready` first so the load balancer deregisters the task; stop accepting new connections; then let in-flight HTTP requests and the background processors' current iteration finish (`http.Server.Shutdown` with a bounded timeout, and cancellation of the context the processors poll on) before exiting. Neither half exists today — the composition root installs no signal handler and calls no `Shutdown`, and the repository records the gap in its own marker: `// HUMAN ASSISTANCE NEEDED` / `// The following code may need additional error handling and graceful shutdown mechanisms` `Source: backend/cmd/server/main.go:L18-L19`. This matters operationally because shipping `/health`, `/ready`, and the `HEALTHCHECK` **without** drain semantics still drops in-flight requests on every ECS/ALB deployment: a readiness probe that never turns negative gives the target group no window to deregister. Per the documentation-only scope this is documented, not fixed; it is carried as part of failure mode FM-5 in [`runbook.md`](runbook.md).
+
+**Local verification.** `grep -n "health\|ready" backend/internal/api/routes.go` returns nothing (Designed). `grep -n "HEALTHCHECK" infrastructure/docker/Dockerfile.backend infrastructure/docker/Dockerfile.frontend` returns nothing, confirming the container health-check gap. `grep -n "Shutdown\|signal.Notify\|SIGTERM" backend/cmd/server/main.go` also returns nothing, confirming the graceful-shutdown gap, while `grep -n -A2 "HUMAN ASSISTANCE NEEDED" backend/cmd/server/main.go` prints the marker that calls for it `Source: backend/cmd/server/main.go:L18-L19`.
 
 ## Pillar 5 — Dashboard template
 
-**Reused (source-present).** None committed.
+**Reused (source-present).** None committed. Nothing in the repository queries, exports, or renders a metric today: the router exposes no `/metrics`, `/health`, or `/ready` route for a dashboard to read `Source: backend/internal/api/routes.go:L9-L54`, and the Terraform stack declares no CloudWatch dashboard, metric filter, or alarm resource — its own trailing comment lists "CloudWatch log groups and metrics" among the pieces still to be added `Source: infrastructure/terraform/main.tf:L226`.
 
-**Added (Designed).** A Grafana-compatible dashboard template ships with this documentation at [`dashboard-template.json`](dashboard-template.json). It contains health/readiness stat panels, request-rate and p95-latency time series, a worker-error log panel (bound to the source-present `logger.Error(...)` call sites, which depend on the absent `pkg/logger` and therefore emit nothing today — non-buildable, not a live signal), a settlement-lag time series, a signature-poll-interval stat, and a trace-error-rate panel. Every panel is maturity-labeled and cited; because the backend does not compile, **no panel binds to a signal that is emitted today** — every panel is either **Designed** (absent capability) or bound to a **source-present (non-buildable)** call site. The worker-error log panel is additionally governed by the [logging allowlist and redaction contract](#logging-allowlist-and-redaction-contract-designed): it must project only sanitized, allowlisted fields and never render raw messages, headers, tokens, or request/response bodies.
+**Added (Designed).** A Grafana-compatible dashboard template ships with this documentation at [`dashboard-template.json`](dashboard-template.json). It contains health/readiness stat panels, request-rate and p95-latency time series, a worker-error log panel (bound to the source-present `logger.Error(...)` call sites, which depend on the absent `pkg/logger` and therefore emit nothing today — non-buildable, not a live signal) `Source: backend/cmd/server/main.go:L10`, a settlement-lag time series, a signature-poll-interval stat, and a trace-error-rate panel. Every panel is maturity-labeled and cited; because the backend does not compile and no exporter exists, **no panel binds to a signal that is emitted today** and every data panel resolves to no data on import `Source: backend/internal/api/routes.go:L9-L54` — each one is either **Designed** (absent capability) or bound to a **source-present (non-buildable)** call site. The worker-error log panel is additionally governed by the [logging allowlist and redaction contract](#logging-allowlist-and-redaction-contract-designed): it must project only sanitized, allowlisted fields and never render raw messages, headers, tokens, or request/response bodies.
 
-**Local verification.** `python3 -c "import json; d=json.load(open('docs/operations/dashboard-template.json')); print(len(d['panels']))"` prints `11` and confirms the template is valid JSON.
+**Local verification.** `python3 -c "import json; d=json.load(open('docs/operations/dashboard-template.json')); print(len(d['panels']))"` prints `11` and confirms the template is valid JSON. Importing it into a Grafana instance renders all 11 panels with every data panel showing "No data", which is the expected outcome for a Designed template `Source: backend/internal/api/routes.go:L9-L54`.
 
 ## Monitoring & Analytics (MA-001)
 
@@ -129,7 +140,7 @@ This is the canonical end-user guide for **MA-001 — the Monitoring & Analytics
 
 ### End-user workflow (setup, usage, troubleshooting)
 
-**Setup.** In the designed target, an operator opens the SPA, authenticates (UA-001; see [`../api-reference/authentication.md`](../api-reference/authentication.md)), and navigates to the **Dashboard** for the vault/transaction summary or to **Analytics** for transaction trends. Prerequisites for even starting the SPA — undeclared dependencies (`@reduxjs/toolkit`, `chart.js`, `react-chartjs-2`), the `@/` path alias, and the absent slices — are enumerated in [`../getting-started/local-development.md`](../getting-started/local-development.md). **Today those prerequisites are unmet and the app does not start.**
+**Setup.** In the designed target, an operator opens the SPA, authenticates (UA-001; see [`../api-reference/authentication.md`](../api-reference/authentication.md)), and navigates to the **Dashboard** for the vault/transaction summary or to **Analytics** for transaction trends. Prerequisites for the SPA to compile — undeclared dependencies (`@reduxjs/toolkit`, `chart.js`, `react-chartjs-2`), the `@/` path alias, and the absent slices — are enumerated in [`../getting-started/local-development.md`](../getting-started/local-development.md). **Today those prerequisites are unmet, so no operator workflow above is reachable.** Precisely: `npm start` *does* bring up the Create React App dev server (it answers `GET http://localhost:3000/` with HTTP 200 and the static shell), but the bundle fails to compile — the browser shows the dev-server overlay `Compiled with problems:` with four `Module not found` errors from `src/index.tsx`, `<div id="root">` stays empty, and **no Dashboard, Analytics, chart, or health panel renders**; the SPA never issues a single request to the backend. `Source: frontend/src/index.tsx:L3-L6`, `Source: frontend/public/index.html:L1-L15`, `Source: frontend/src/store/index.ts:L8-L12`. A served shell is not a running dashboard, so every surface in the table above remains **Source-present (non-buildable)** or **Designed**, never Implemented.
 
 **Usage (as designed).** The Dashboard renders a vault list, a transaction list, and a summary `Chart` `Source: frontend/src/pages/Dashboard.tsx:L43-L45`; the Analytics page renders transaction-trend visualizations from an `analytics` store slice `Source: frontend/src/pages/Analytics.tsx:L38-L41`; and system-health and performance panels read from the Designed `/health`, `/ready`, and `/metrics` endpoints previewed by [`dashboard-template.json`](dashboard-template.json). None of these panels display data at this checkpoint.
 

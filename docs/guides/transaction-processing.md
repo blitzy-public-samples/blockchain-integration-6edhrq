@@ -91,6 +91,8 @@ The backend and frontend use different transaction status vocabularies:
 
 **Transactions never leave `Pending`.** The settlement loop does not run today: the backend does not compile because the processor call site does not match the service signature (failure mode FM-4), and even once it built the transaction processor carries the latent ticker panic (failure mode FM-1). Pending transactions are therefore not advanced to `Processed`. Confirm the backend builds and the settlement processor is running before investigating data issues.
 
+**Settlement retries have no backoff (failure mode FM-2).** Once the loop does run, a transaction whose settlement errors is *not* retried with backoff: the processor logs the error via `logger.Error(...)` and `continue`s, leaving the record `Pending` for an implicit retry on the next ticker tick, with no retry counter and no dead-letter path `Source: backend/internal/tasks/transaction_processor.go:L44,L50,L57`. A persistently failing transaction therefore retries forever at the ticker cadence while settlement lag climbs. This is **failure mode FM-2** in the [Runbook](../operations/runbook.md), whose alert fires when the maximum pending age exceeds the **300 s** red threshold on the settlement-lag panel (`id: 9`) of [`dashboard-template.json`](../operations/dashboard-template.json) — a **Designed placeholder** value, since `transactionCheckInterval` is uninitialized and supplies no cadence to derive from `Source: backend/internal/tasks/transaction_processor.go:L13-L16`. Maturity is **source-present (non-buildable)**: this is the behavior of the as-written code, not observed runtime behavior. Documented, not fixed.
+
 **Cached results never expire (as coded).** The Redis write uses a TTL of `0` (no expiry) for `tx:<id>` entries `Source: backend/internal/tasks/transaction_processor.go:L55`; as written, stale settlement results would accumulate. Maturity is **source-present (non-buildable)** - the processor does not compile (absent `pkg/logger` and undefined `db` helpers), so this is a documented caching caveat of the as-written code, not observed runtime behavior.
 
 **Store-slice key mismatch in the UI.** The Redux store registers the reducer under the singular key `transaction` `Source: frontend/src/store/index.ts:L10`, while the page selects `state.transactions` (plural) `Source: frontend/src/pages/TransactionProcessing.tsx:L28`. Selections resolve against an undefined slice (**source-present defect, non-buildable**). Documented, not fixed.
@@ -99,6 +101,7 @@ The backend and frontend use different transaction status vocabularies:
 
 - [Transactions API Reference](../api-reference/transactions.md) - endpoint contract for the five transaction routes.
 - [Data Flow](../architecture/data-flow.md) - `Fig B2 - Transaction Create + Async Settlement`.
-- [Runbook](../operations/runbook.md) - FM-1 (ticker panic) and FM-4 (processor/router wiring mismatch) remediation.
+- [Runbook](../operations/runbook.md) - FM-1 (latent ticker panic), FM-2 (settlement retry behavior, no backoff) and FM-4 (processor/router wiring mismatch) remediation.
+- [Observability dashboard template](../operations/dashboard-template.json) - the settlement-lag panel (`id: 9`) that FM-2's alert is defined against.
 - [Scaffold vs Design](../architecture/scaffold-vs-design.md) - status-vocabulary reconciliation.
 - [Documentation index](../index.md).

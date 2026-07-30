@@ -97,7 +97,7 @@ go tasks.StartTransactionProcessor(dbConn, blockchainClients, custodianClient)  
 
 ### Uninitialized ticker panic (source-present defect; correction Designed)
 
-`transactionCheckInterval` is declared as a package-level `time.Duration` but never assigned, so it holds the zero value and `time.NewTicker(transactionCheckInterval)` evaluates to `time.NewTicker(0)`, which panics at startup. `Source: backend/internal/tasks/transaction_processor.go:L13-L16`. By contrast the signature processor uses a real `5 * time.Minute` constant. `Source: backend/internal/tasks/signature_processor.go:L13`.
+`transactionCheckInterval` is declared as a package-level `time.Duration` but never assigned, so it holds the zero value and `time.NewTicker(transactionCheckInterval)` evaluates to `time.NewTicker(0)`, which would panic at startup — a **latent** defect rather than the first observable failure, because the `tasks` package does not compile today. `Source: backend/internal/tasks/transaction_processor.go:L13-L16`. The compile blockers come first: the worker imports the absent `pkg/logger` and the module has no `go.mod`, so the build fails before the ticker is ever constructed, and the panic is reachable only after those blockers are resolved. `Source: backend/internal/tasks/transaction_processor.go:L10`. By contrast the signature processor uses a real `5 * time.Minute` constant. `Source: backend/internal/tasks/signature_processor.go:L13`.
 
 ```go
 var transactionCheckInterval time.Duration         // L13 — zero value (0)

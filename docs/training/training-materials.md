@@ -3,9 +3,19 @@
 This is the written **training and onboarding course** for the Blockchain
 Integration Service and Dashboard. It fulfills the Software Project Proposal's
 Training-Materials deliverable, whose two items are *Video tutorials for system
-usage* and *Written guides for common operations*. `Source: documentation/Software Project Proposal.md` (DELIVERABLES, item 10) This page delivers the written guides for common operations and role-based
+usage* and *Written guides for common operations*. `Source: documentation/Software Project Proposal.md:L419-L421` (DELIVERABLES, item 10) This page delivers the written guides for common operations and role-based
 onboarding; the **video tutorials remain Designed** and are addressed in
 [Video Tutorials](#video-tutorials) below.
+
+**Provenance (documentation-set bookkeeping).** This page is mandated by the Agent
+Action Plan's requirement to fulfill the project's own committed documentation
+deliverables, which names *training materials* among the Proposal commitments the
+plan treats as authoritative (AAP §0.1.1, §0.11.2). Unlike its companion
+[System Administration Guide](../operations/system-administration.md), `docs/training/`
+is covered by **neither** a row in the AAP §0.5.1 file-transformation map **nor** an
+in-scope path glob in AAP §0.8.1, so a plan-versus-delivered path diff reports this
+page as an extra. That is an omission in the frozen plan rather than an unplanned
+addition here, so the traceability is recorded at the artifact instead.
 
 The course is organized as role-based learning paths that reference the existing
 end-user guides, the architecture set, the security model, and the operations
