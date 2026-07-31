@@ -209,6 +209,120 @@ The design corpus commits the platform to substantial regulatory and audit oblig
 Because no audit evidence is produced and no compliance control executes, this deliverable makes **no assertion of compliance readiness**; the audit-evidence and control-attestation artifacts a compliance program would require are absent and remain Designed work.
 
 
+## Documentation Toolchain Supply Chain and Advisory Posture
+
+**Scope of this section.** Everything above describes the *application's* security controls. This section covers a different surface: the third-party dependencies that **this documentation deliverable itself** introduces — the CDN libraries the [executive presentation](../../blitzy-deck/executive-summary.html) loads when someone opens it, and the command-line tools used to validate the documentation. It is recorded here because it is the only place in the repository where a reviewer can find the deliverable's own dependency inventory, and because the honesty discipline this documentation set applies to code defects applies equally to the versions it pins: a known advisory that is disclosed and reasoned about is a managed risk, while an undisclosed one is a hidden one. The application's own dependency posture is separate and weaker — the backend has no `go.mod`/`go.sum`, so its dependencies are neither pinned nor auditable — and it is documented in [`../getting-started/local-development.md`](../getting-started/local-development.md#1-no-committed-go-module-gomod--gosum) and [`../getting-started/installation.md`](../getting-started/installation.md#prerequisites). This deliverable is documentation-only, so **no application dependency is added, upgraded, or pinned by it**. `Source: Agent Action Plan §0.8.2 (application dependency changes out of scope)`.
+
+### Inventory
+
+| Component | Version | Where it is used | Open advisories affecting this version | Maturity |
+|-----------|---------|------------------|----------------------------------------|----------|
+| reveal.js | 5.1.0 | Presentation framework the executive deck loads from `cdn.jsdelivr.net` | **0** | **Implemented** — version-pinned URL plus a `sha384` Subresource Integrity (SRI) digest |
+| Lucide | 0.460.0 | SVG icon set in the executive deck | **0** | **Implemented** — pinned plus SRI |
+| Mermaid | 11.4.0 | Diagram renderer inside the executive deck (browser runtime) | **6** (6 moderate) | **Implemented** — pinned plus SRI; the version itself is **mandated**, not chosen. `Source: Agent Action Plan §0.10.2 (CDN versions pinned exactly)` |
+| DOMPurify — **bundled inside Mermaid 11.4.0** | 3.1.6 | Sanitizer Mermaid resolves transitively as an ES-module sub-chunk; never referenced directly by this repository | **19** (15 moderate, 4 low) | **Implemented** — reached transitively, so no direct dependency declaration exists to pin it |
+| `@mermaid-js/mermaid-cli` (`mmdc`) | 11.16.0 | Local validation — renders every Mermaid block in `docs/**` to catch syntax errors | **0** | **Implemented** — validation tooling only; never shipped to a reader |
+| `@redocly/cli` | 1.25.11 | Local validation — OpenAPI 3.0 lint of [`../api-reference/openapi.yaml`](../api-reference/openapi.yaml) | **0** | **Implemented** — validation tooling only. `Source: docs/api-reference/overview.md (specification validation command)` |
+| `github.com/swaggo/swag` | v1.16.6 | The **designed** OpenAPI generation workflow | **0** | **Designed** — cannot run today: no `go.mod` exists and no `// @` annotations are present. `Source: docs/api-reference/overview.md (swag init workflow)` |
+| `golangci-lint` installer fetched from `master/install.sh` | mutable branch reference | Backend CI lint job | Not advisory-tracked; the **installer** floats even though the linter version is pinned | **Designed** remediation — already documented at [`../contributing/development.md`](../contributing/development.md#backend-ci) |
+| Google Fonts (Inter, Space Grotesk, Fira Code) | Served per requesting browser | Executive deck typography (mandated) | Not advisory-tracked | **Implemented**; privacy consideration recorded [below](#privacy-and-browser-policy-considerations) |
+
+Advisory counts were obtained from the npm bulk advisory service — the same data source `npm audit` consumes — because the repository intentionally ships no lockfile for `npm audit` to read. `Source: registry.npmjs.org/-/npm/v1/security/advisories/bulk (queried for each component and version in the table above)`.
+
+### Where the exposure is, and where it is not
+
+The entire advisory surface sits in **one place**: the browser runtime of the executive deck, which is pinned to Mermaid 11.4.0 and therefore to the DOMPurify 3.1.6 that Mermaid 11.4.0 bundles. Two facts establish that boundary precisely:
+
+- **The bundled sanitizer version is 3.1.6, verified from the shipped bytes.** Mermaid 11.4.0 declares its sanitizer dependency as the range `^3.0.11 <3.1.7`. `Source: registry.npmjs.org/mermaid/11.4.0 (dependencies.dompurify)`. The ES-module sub-chunk the deck actually loads embeds the marker `version="3.1.6"`. `Source: cdn.jsdelivr.net/npm/mermaid@11.4.0/dist/chunks/mermaid.esm.min/chunk-ITX3UAHE.mjs`.
+- **The validation toolchain that renders `docs/**` is fully patched.** `@mermaid-js/mermaid-cli` 11.16.0 resolves Mermaid 11.16.0, which is above every fixed release in the Mermaid table below, and whose own sanitizer range `^3.3.3` resolves to DOMPurify 3.4.12 — above every vulnerable range in the DOMPurify table below. So the Markdown documentation set carries **zero** open advisories through its rendering path; only the deck's pinned browser runtime does.
+
+### Mermaid 11.4.0 — six open advisories
+
+| Advisory | CVE | Severity | Range covering 11.4.0 | First patched | Weakness | Reachable in this deliverable? |
+|----------|-----|----------|-----------------------|---------------|----------|--------------------------------|
+| [`GHSA-8gwm-58g9-j8pw`](https://github.com/advisories/GHSA-8gwm-58g9-j8pw) | CVE-2025-54880 | Moderate (CVSS v4 5.1) | `>= 11.1.0, < 11.10.0` | `11.10.0` | Architecture-diagram `iconText` not sanitized (XSS) | No — the corpus contains zero `architecture-beta` diagrams |
+| [`GHSA-7rqq-prvp-x9jh`](https://github.com/advisories/GHSA-7rqq-prvp-x9jh) | CVE-2025-54881 | Moderate (CVSS v4 5.3) | `>= 11.0.0-alpha.1, < 11.10.0` | `11.10.0` | Sequence-diagram labels improperly sanitized (XSS) | No — the deck renders flowcharts only; the three `sequenceDiagram` blocks live in [`../architecture/data-flow.md`](../architecture/data-flow.md) and are rendered by the patched toolchain |
+| [`GHSA-ghcm-xqfw-q4vr`](https://github.com/advisories/GHSA-ghcm-xqfw-q4vr) | CVE-2026-41149 | Moderate (CVSS v4 5.3) | `>= 11.0.0-alpha.1, <= 11.14.0` | `11.15.0` | State-diagram `classDef` HTML injection | No — the corpus contains zero `stateDiagram` blocks |
+| [`GHSA-xcj9-5m2h-648r`](https://github.com/advisories/GHSA-xcj9-5m2h-648r) | CVE-2026-41148 | Moderate (CVSS v4 5.3) | `>= 11.0.0-alpha.1, <= 11.14.0` | `11.15.0` | `classDef` CSS injection | No — every `classDef` declaration in the corpus is a static, committed literal (`stroke-dasharray`, `rx`/`ry`, `fill`, `stroke`, `color`) with no interpolated value |
+| [`GHSA-6m6c-36f7-fhxh`](https://github.com/advisories/GHSA-6m6c-36f7-fhxh) | CVE-2026-41150 | Moderate (CVSS v4 5.3) | `>= 11.0.0-alpha.1, <= 11.14.0` | `11.15.0` | Gantt-chart infinite-loop denial of service | No — the corpus contains zero `gantt` charts |
+| [`GHSA-87f9-hvmw-gh4p`](https://github.com/advisories/GHSA-87f9-hvmw-gh4p) | CVE-2026-41159 | Moderate (CVSS v4 5.3) | `>= 11.0.0-alpha.1, <= 11.14.0` | `11.15.0` | Configuration CSS injection | No — the Mermaid configuration is authored inline in the deck and is not reachable by any reader input |
+
+Every one of the six is fixed in a release the deck **may not adopt**: the 11.4.0 pin is mandated. `Source: Agent Action Plan §0.10.2`. Changing it is **Designed** work that requires an amendment to that mandate, so disclosure — this section — is the remediation actually available.
+
+### Bundled DOMPurify 3.1.6 — nineteen open advisories
+
+These affect the sanitizer Mermaid carries internally. They are listed in full because a reader who saw only the Mermaid table would reasonably, and wrongly, conclude that the deck's residual risk stops at Mermaid's own parser.
+
+| Advisory | CVE | Severity | Range covering 3.1.6 | First patched | Precondition the bypass requires | Reachable here? |
+|----------|-----|----------|----------------------|---------------|----------------------------------|-----------------|
+| [`GHSA-vhxf-7vqr-mrjg`](https://github.com/advisories/GHSA-vhxf-7vqr-mrjg) | CVE-2025-26791 | Moderate (CVSS v4 4.5) | `< 3.2.4` | `3.2.4` | Attacker-supplied markup passed to `sanitize()` | No |
+| [`GHSA-v8jm-5vwx-cfxm`](https://github.com/advisories/GHSA-v8jm-5vwx-cfxm) | CVE-2025-15599 | Moderate (CVSS v4 5.1) | `>= 3.1.3, < 3.2.7` | `3.2.7` | Attacker-supplied markup passed to `sanitize()` | No |
+| [`GHSA-hpcv-96wg-7vj8`](https://github.com/advisories/GHSA-hpcv-96wg-7vj8) | CVE-2026-49458 | Moderate (CVSS v4 6.1) | `<= 3.4.5` | `3.4.6` | `IN_PLACE` mode across realms | No |
+| [`GHSA-r47g-fvhr-h676`](https://github.com/advisories/GHSA-r47g-fvhr-h676) | CVE-2026-49459 | Moderate (CVSS v4 6.1) | `<= 3.4.5` | `3.4.6` | `IN_PLACE` mode with a clobbered root element | No |
+| [`GHSA-rp9w-3fw7-7cwq`](https://github.com/advisories/GHSA-rp9w-3fw7-7cwq) | CVE-2026-49978 | Moderate (CVSS v4 5.1) | `<= 3.4.6` | `3.4.7` | `IN_PLACE` mode with a shadow root inside `<template>` | No |
+| [`GHSA-v2wj-7wpq-c8vv`](https://github.com/advisories/GHSA-v2wj-7wpq-c8vv) | CVE-2026-0540 | Moderate (CVSS v4 5.1) | `>= 3.1.3, <= 3.3.1` | `3.3.2` | Attacker-supplied markup passed to `sanitize()` | No |
+| [`GHSA-h7mw-gpvr-xq4m`](https://github.com/advisories/GHSA-h7mw-gpvr-xq4m) | CVE-2026-41240 | Moderate (CVSS v4 6.0) | `< 3.4.0` | `3.4.0` | Function-form `ADD_TAGS` predicate | No |
+| [`GHSA-crv5-9vww-q3g8`](https://github.com/advisories/GHSA-crv5-9vww-q3g8) | CVE-2026-41239 | Moderate (CVSS v4 6.8) | `>= 1.0.10, < 3.4.0` | `3.4.0` | `SAFE_FOR_TEMPLATES` with `RETURN_DOM` | No |
+| [`GHSA-v9jr-rg53-9pgp`](https://github.com/advisories/GHSA-v9jr-rg53-9pgp) | CVE-2026-41238 | Moderate (CVSS v4 **6.9** — joint highest in this set) | `>= 3.0.1, < 3.4.0` | `3.4.0` | A separate prototype-pollution primitive **plus** `CUSTOM_ELEMENT_HANDLING` | No |
+| [`GHSA-c2j3-45gr-mqc4`](https://github.com/advisories/GHSA-c2j3-45gr-mqc4) | none assigned | Low (CVSS v4 2.1) | `<= 3.4.11` | `3.4.12` | `CUSTOM_ELEMENT_HANDLING` with an `afterSanitizeElements` hook | No |
+| [`GHSA-cmwh-pvxp-8882`](https://github.com/advisories/GHSA-cmwh-pvxp-8882) | CVE-2026-65898 | Moderate (CVSS v4 5.1) | `<= 3.4.10` | `3.4.11` | Caller-invoked `setConfig()` together with hooks | No |
+| [`GHSA-vxr8-fq34-vvx9`](https://github.com/advisories/GHSA-vxr8-fq34-vvx9) | CVE-2026-65899 | Low (CVSS v4 2.1) | `< 3.4.9` | `3.4.9` | A Trusted Types policy plus `clearConfig()` | No |
+| [`GHSA-gvmj-g25r-r7wr`](https://github.com/advisories/GHSA-gvmj-g25r-r7wr) | CVE-2026-65900 | Low (CVSS v4 2.0) | `>= 3.0.0, <= 3.4.7` | `3.4.8` | `SAFE_FOR_TEMPLATES` with `<template>` content | No |
+| [`GHSA-x4vx-rjvf-j5p4`](https://github.com/advisories/GHSA-x4vx-rjvf-j5p4) | CVE-2026-65901 | Low (no CVSS v4 score published) | `<= 3.4.6` | none recorded; versions above `3.4.6` fall outside the vulnerable range | `IN_PLACE` mode on live nodes | No |
+| [`GHSA-76mc-f452-cxcm`](https://github.com/advisories/GHSA-76mc-f452-cxcm) | CVE-2026-65902 | Moderate (CVSS v4 6.1) | `< 3.4.7` | `3.4.7` | A hook mutating `data.allowedTags` / `data.allowedAttributes` | No |
+| [`GHSA-39q2-94rc-95cp`](https://github.com/advisories/GHSA-39q2-94rc-95cp) | CVE-2026-65903 | Moderate (CVSS v4 5.3) | `<= 3.3.3` | `3.4.0` | Function-form `ADD_TAGS` combined with `FORBID_TAGS` | No |
+| [`GHSA-cjmm-f4jc-qw8r`](https://github.com/advisories/GHSA-cjmm-f4jc-qw8r) | CVE-2026-65912 | Moderate (CVSS v4 5.3) | `<= 3.3.1` | `3.3.2` | Predicate-form `ADD_ATTR` | No |
+| [`GHSA-cj63-jhhr-wcxv`](https://github.com/advisories/GHSA-cj63-jhhr-wcxv) | CVE-2026-65913 | Moderate (CVSS v4 5.3) | `<= 3.3.1` | `3.3.2` | `USE_PROFILES` configuration | No |
+| [`GHSA-h8r8-wccr-v5f2`](https://github.com/advisories/GHSA-h8r8-wccr-v5f2) | CVE-2026-65914 | Moderate (CVSS v4 **6.9** — joint highest in this set) | `< 3.3.2` | `3.3.2` | Attacker-supplied markup passed to `sanitize()` (mutation XSS) | No |
+
+**Why none is reachable.** Every row needs one of two things that this deliverable never supplies: attacker-controlled markup arriving at the sanitizer, or attacker-controlled sanitizer configuration. The deck's five diagrams are static, committed, author-authored text with no reader input of any kind, no `click` directives, and no dynamic label construction; and the repository **never calls DOMPurify directly** — it is reached only inside Mermaid's own label path, with Mermaid's own fixed options, so the non-default modes these bypasses require (`IN_PLACE`, `SAFE_FOR_TEMPLATES`, `RETURN_DOM`, `USE_PROFILES`, predicate-form `ADD_TAGS`/`ADD_ATTR`, `CUSTOM_ELEMENT_HANDLING`, Trusted Types, caller-invoked `setConfig()`/`clearConfig()`) are not in play. The deck's own hardening narrows it further, as listed under [Compensating controls](#compensating-controls-in-the-executive-deck) below.
+
+**Why a version bump cannot fix it.** The earliest DOMPurify release that fixes any row above is `3.2.4`, and clearing every row requires `3.4.12`. Mermaid 11.4.0's declared range is `^3.0.11 <3.1.7`, which is **structurally incapable** of resolving to any of them. `Source: registry.npmjs.org/mermaid/11.4.0 (dependencies.dompurify)`. Patching therefore requires moving off the mandated Mermaid pin — **Designed** work gated on an amendment to `Agent Action Plan §0.10.2` — which is precisely why this section documents the posture instead of claiming a fix.
+
+**Two high-severity advisories deliberately excluded.** CVE-2024-45801 ([`GHSA-mmhx-hmjr-r674`](https://github.com/advisories/GHSA-mmhx-hmjr-r674)) and CVE-2024-47875 ([`GHSA-gx9m-whjm-85jf`](https://github.com/advisories/GHSA-gx9m-whjm-85jf)) are both **High** severity and are frequently attributed to Mermaid's bundled sanitizer. Both are fixed in DOMPurify `3.1.3`, so neither affects the bundled `3.1.6`. They are named here so the omission reads as a resolved question rather than an oversight.
+
+### Compensating controls in the executive deck
+
+All four are **Implemented** in the shipped file and are what make the residual risk acceptable rather than merely unpatched:
+
+- **Mermaid `securityLevel: 'antiscript'`** — strips `<script>` from label text instead of the permissive `'loose'` setting. `Source: blitzy-deck/executive-summary.html (MERMAID_CONFIG)`.
+- **`htmlLabels: false`** — labels are rendered as SVG text, which cannot contain markup at all, removing the HTML-label surface (and with it the `<img>`-based outbound-request surface) rather than sanitizing it. `Source: blitzy-deck/executive-summary.html (MERMAID_CONFIG)`.
+- **A restrictive Content Security Policy** — `default-src 'none'` with executable, style, font, image and connect origins re-allowed only for the pinned CDN and Google Fonts, and without `unsafe-eval`. `Source: blitzy-deck/executive-summary.html (Content-Security-Policy meta element in head)`.
+- **Subresource Integrity on all five pinned CDN assets** — a `sha384` digest plus `crossorigin="anonymous"` on both stylesheets and both classic scripts, and an import-map `integrity` entry for the Mermaid ES module, which is the only mechanism able to attach a digest to a module URL. `Source: blitzy-deck/executive-summary.html (head link elements, script elements before body close, and the importmap integrity map)`.
+
+Two structural properties reinforce them: the deck is **read-only and takes no input** (no forms, no query parameters consumed as content, no cookies, no storage), and its diagram source is committed to version control, so a change to it is a reviewable commit rather than a runtime event.
+
+**Warning for anyone reusing this deck's CDN block.** The unreachability argument above is a property of *this* deliverable, not of the pinned versions. Copying the deck's dependency block into a page that renders **reader-authored** Mermaid — a wiki, a comment field, a diagram playground — makes several of the advisories above genuinely reachable, including the sequence-diagram XSS and the Gantt denial of service. In that setting, upgrade Mermaid to at least `11.15.0` (which also lifts the bundled sanitizer to a patched line) before accepting untrusted diagram text.
+
+### Privacy and browser-policy considerations
+
+- **Referrer suppression on every third-party request is Implemented.** Because the deck is a single file that reaches four remote hosts — `cdn.jsdelivr.net` for the framework, icon, and diagram bundles, and `fonts.googleapis.com` / `fonts.gstatic.com` for typography — each of those requests would, under Chrome's default `strict-origin-when-cross-origin` policy, disclose the deck's own origin to the CDN operator. When the file is served over HTTP from an internal host that origin is the internal hostname and port; when it is opened from disk there is no origin to leak, but the same file is routinely served both ways. The deck therefore declares `<meta name="referrer" content="no-referrer">` in its `<head>`, positioned ahead of every stylesheet, script, module, and font reference so that it governs all of them. `Source: blitzy-deck/executive-summary.html (referrer meta element and the "Referrer policy and third-party request privacy" head commentary)`. Runtime verification confirmed the control is both active and harmless: the `Referer` request header is empty on the jsDelivr framework request and on the Google Fonts stylesheet request, all thirty-two requests still return HTTP 200, all five Subresource-Integrity-guarded assets still validate and execute, and no Content-Security-Policy violation is raised. Neither jsDelivr nor Google Fonts requires a `Referer` to serve a response, and referrer policy is independent of Subresource Integrity and of CORS, so suppressing it costs nothing. The `Referrer-Policy: no-referrer` **HTTP response header** is the stronger, standards-preferred form of the same control, but a header cannot be attached to a file opened from disk; it is therefore **Designed**, applicable only if the deck is ever published from a web server, alongside the other header-only controls listed in the next bullet.
+- **Google Fonts is a third-party request (privacy, not vulnerability).** The deck loads its typography from `fonts.googleapis.com` and `fonts.gstatic.com`, which transmits the viewer's IP address to a third party on every open. Referrer suppression, above, removes the originating URL from those requests but not the IP address, which is inherent to making the request at all. A Munich Regional Court ruling of 2022-01-20 (Az. 3 O 17493/20) found that embedding Google Fonts remotely, without consent, infringed the plaintiff's rights under the GDPR, and named self-hosting as the alternative. Two facts bound the relevance here: the font loading is **mandated** — `Source: Agent Action Plan §0.10.2 (typography loaded via Google Fonts)` — and self-hosting the files would violate the same mandate's "single self-contained file, no local file dependencies" requirement. The deck's intended use is local, opened from disk, with no public EU-facing audience, so the consideration is **recorded rather than remediated**; it becomes actionable only if the deck is ever published on a public site, in which case self-hosted `woff2` files served from the same origin are the **Designed** mitigation.
+- **Framing / clickjacking is a hosted-only concern.** A `<meta>`-delivered CSP cannot express `frame-ancestors`, so framing protection requires HTTP response headers — `X-Frame-Options: DENY` or `Content-Security-Policy: frame-ancestors 'none'`. The deck documents this as **Designed** in its own head comment, and the impact today is low: it is read-only, credential-free, and has no forms, no authentication, and no cookies. `Source: blitzy-deck/executive-summary.html (Content-Security-Policy commentary in head)`.
+
+### Reproducing this audit
+
+Each command below is the exact check behind a claim above, and each runs without a lockfile, a Go toolchain, or any repository modification:
+
+```bash
+curl -sX POST -H 'Content-Type: application/json' \
+  -d '{"mermaid":["11.4.0"],"dompurify":["3.1.6"]}' \
+  https://registry.npmjs.org/-/npm/v1/security/advisories/bulk        # 6 + 19 advisories
+```
+
+```bash
+curl -s https://registry.npmjs.org/mermaid/11.4.0 | grep -o '"dompurify":"[^"]*"'   # ^3.0.11 <3.1.7
+```
+
+```bash
+curl -s https://cdn.jsdelivr.net/npm/mermaid@11.4.0/dist/chunks/mermaid.esm.min/chunk-ITX3UAHE.mjs \
+  | grep -o 'version="3\.[0-9.]*"' | head -1                          # version="3.1.6"
+```
+
+Advisory detail for any identifier in the two tables is retrievable from `https://api.github.com/advisories/<GHSA-id>`, which carries the CVE identifier, the CVSS vector and score, the affected ranges, and the first patched release used in the tables above.
+
+**Freshness.** Every count, identifier, CVSS score, covering range, and first-patched version in this section was verified against those live sources **on 2026-07-31**. Advisory databases only grow, so treat the counts as a floor rather than a fixed total: re-run the commands above whenever a pinned version changes or this section is reviewed, and add any newly published advisory to the corresponding table with the same reachability reasoning. `Source: registry.npmjs.org/-/npm/v1/security/advisories/bulk, api.github.com/advisories/<GHSA-id> (both queried 2026-07-31)`.
+
 ## Known Gaps and Maturity Summary
 
 **Auth-middleware caveat.** The single most important gap in the current security posture is that `internal/api/middleware.AuthMiddleware()` is referenced by the router on the logout route and on every protected group — `/vault`, `/transactions`, and `/signatures` — but the `middleware` package is **imported and never defined**. Because the middleware does not exist, **token validation and RBAC enforcement do not run today**, and the "auth-protected" route groups are therefore not actually protected at runtime. `Source: backend/internal/api/routes.go:L6`, `Source: backend/internal/api/routes.go:L21`, `Source: backend/internal/api/routes.go:L25`, `Source: backend/internal/api/routes.go:L35`, `Source: backend/internal/api/routes.go:L45`. The same applies to `core/auth.AuthService`, which the login and logout handlers depend on but which is likewise imported and absent. `Source: backend/internal/api/handlers/auth.go:L5`. Both are tagged **Designed**. The consolidated Implemented/Provisioned/Designed defect catalog — including the auth-middleware and `AuthService` rows — is maintained in [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md).
@@ -240,6 +354,21 @@ The maturity of every control discussed on this page is summarized below.
 | KYC/AML customer screening and transaction monitoring | Designed (no identity-verification field, screening integration, or monitoring call in code) | `Source: documentation/Software Requirements Specifications (SRS).md:L550,L184`; `Source: backend/internal/db/schema.go:L20-L30` |
 | Data retention policies (transactions 7y, signatures 1y, activity logs 2y, system logs 90d) | Designed (no S3 lifecycle rule, no RDS backup retention; the only source-present TTLs are a 24h signature cache and a non-expiring transaction cache) | `Source: documentation/Software Requirements Specifications (SRS).md:L558,L646-L650`; `Source: infrastructure/terraform/main.tf:L134-L140`; `Source: backend/internal/tasks/signature_processor.go:L52`; `Source: backend/internal/tasks/transaction_processor.go:L55` |
 
+The controls below belong to the [documentation toolchain](#documentation-toolchain-supply-chain-and-advisory-posture) rather than to the application, and are listed separately so the two surfaces are never conflated.
+
+| Documentation-toolchain control | Maturity | Evidence |
+|---------------------------------|----------|----------|
+| Exact CDN version pinning of every deck dependency (reveal.js 5.1.0, Mermaid 11.4.0, Lucide 0.460.0) | Implemented | `Source: blitzy-deck/executive-summary.html (head link elements and script elements before body close)`; `Source: Agent Action Plan §0.10.2` |
+| Subresource Integrity on all five pinned CDN assets | Implemented | `Source: blitzy-deck/executive-summary.html (integrity attributes plus the importmap integrity map)` |
+| Restrictive Content Security Policy without `unsafe-eval` | Implemented | `Source: blitzy-deck/executive-summary.html (Content-Security-Policy meta element in head)` |
+| Mermaid render hardening (`securityLevel: 'antiscript'`, `htmlLabels: false`) | Implemented | `Source: blitzy-deck/executive-summary.html (MERMAID_CONFIG)` |
+| Referrer suppression on all third-party requests (`<meta name="referrer" content="no-referrer">`) | Implemented | `Source: blitzy-deck/executive-summary.html (referrer meta element in head)`; see [Privacy and browser-policy considerations](#privacy-and-browser-policy-considerations) |
+| Graceful degradation when a pinned asset fails its digest or the CDN is unreachable — all sixteen slides stay readable and scrollable, the dark slide grounds are re-applied, and every diagram still renders | Implemented | `Source: blitzy-deck/executive-summary.html (the html.reveal-unavailable fallback rules and the classic safety-net script before body close)` |
+| Third-party advisory disclosure for the pinned chain (6 Mermaid + 19 bundled-DOMPurify advisories, with reachability rationale) | Implemented | [Documentation Toolchain Supply Chain and Advisory Posture](#documentation-toolchain-supply-chain-and-advisory-posture) |
+| Upgrade to a patched Mermaid line (≥ 11.15.0, which also lifts the bundled sanitizer past every open advisory) | Designed | Blocked by the mandated pin — `Source: Agent Action Plan §0.10.2`; the bundled range `^3.0.11 <3.1.7` cannot resolve a patched sanitizer — `Source: registry.npmjs.org/mermaid/11.4.0 (dependencies.dompurify)` |
+| HTTP response-header controls for a hosted deck (`frame-ancestors` / `X-Frame-Options`, CSP reporting, and the header form of `Referrer-Policy`) | Designed | Inexpressible in a `<meta>` policy, or unavailable to a file opened from disk — `Source: blitzy-deck/executive-summary.html (Content-Security-Policy and referrer-policy commentary in head)` |
+| Self-hosted web fonts (removes the third-party font request) | Designed | Precluded by the single-self-contained-file requirement — `Source: Agent Action Plan §0.10.2` |
+
 
 ## Related Documentation
 
@@ -249,3 +378,6 @@ The maturity of every control discussed on this page is summarized below.
 - [`../architecture/data-model.md`](../architecture/data-model.md) — the `User` entity in **Fig M1 — Data Model ERD**, including the `Role` field on which RBAC maps.
 - [`../index.md`](../index.md) — documentation home and root-navigation landing page, which links to this security model.
 - [`../../README.md`](../../README.md) — project readme and top-level navigation.
+- [`../getting-started/local-development.md`](../getting-started/local-development.md#build-caveats) — the *application's* unpinned dependency graph (no `go.mod`/`go.sum`, no `package-lock.json`), which is a separate supply-chain gap from the documentation toolchain inventoried in [Documentation Toolchain Supply Chain and Advisory Posture](#documentation-toolchain-supply-chain-and-advisory-posture).
+- [`../contributing/development.md`](../contributing/development.md#known-limitations) — the CI supply-chain limitations, including GitHub Actions referenced by mutable `@vN` tags rather than immutable commit SHAs.
+- [`../api-reference/overview.md`](../api-reference/overview.md#openapi-specification-and-the-swag-init-workflow) — the documentation-build tools whose advisory status this page audits (`swag@v1.16.6`, `@redocly/cli@1.25.11`).

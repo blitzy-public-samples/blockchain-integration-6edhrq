@@ -67,6 +67,48 @@
                  base-uri 'none';
                  form-action 'none'">
 
+  <!--
+    ==========================================================================
+    Referrer policy and third-party request privacy (QA O2 · INFO #1, INFO #2)
+    ==========================================================================
+    REFERRER POLICY: IMPLEMENTED via the <meta name="referrer"> element below,
+    declared ahead of every remote fetch in this <head> so it governs the Google
+    Fonts stylesheet, the reveal.js CSS, and the classic/module scripts before
+    </body>. Rationale:
+      * Without it, Chrome's default policy (strict-origin-when-cross-origin)
+        sends this page's ORIGIN to cdn.jsdelivr.net and to Google Fonts on
+        every load. Opened from disk that origin is "null" and nothing leaks,
+        but once the deck is served from an internal host, the hostname itself
+        can disclose the reviewing organisation.
+      * 'no-referrer' suppresses the header outright. Nothing here needs it:
+        neither jsdelivr nor Google Fonts requires a Referer, and Subresource
+        Integrity and CORS are unaffected by its absence — verified by loading
+        the deck with this policy active and observing every request return 200
+        with all five SRI-checked assets accepted.
+      * Defence in depth only, not a vulnerability fix. The equivalent
+        Referrer-Policy HTTP response header is the Designed form when this deck
+        is served; the <meta> form is what a single static file can express.
+
+    GOOGLE FONTS IS A THIRD-PARTY REQUEST (privacy consideration, not a
+    vulnerability): loading typography from fonts.googleapis.com and
+    fonts.gstatic.com transmits the viewer's IP address to a third party on
+    every open. A Munich Regional Court ruling of 2022-01-20 (Az. 3 O 17493/20)
+    found that embedding Google Fonts remotely without consent infringed the
+    plaintiff's rights under the GDPR and named self-hosting as the alternative.
+    Two facts bound the relevance here: the Google Fonts loading is MANDATED
+    (AAP Section 0.10.2 requires Inter / Space Grotesk / Fira Code via Google
+    Fonts), and self-hosting the woff2 files would violate the same rule's
+    "single self-contained file, no local file dependencies" requirement. The
+    deck's intended use is local, opened from disk, with no public EU-facing
+    audience, so the consideration is RECORDED rather than remediated; it
+    becomes actionable only if the deck is published on a public site, where
+    same-origin self-hosted fonts are the Designed mitigation.
+    Full write-up: docs/security/security-model.md, section "Documentation
+    Toolchain Supply Chain and Advisory Posture".
+    ==========================================================================
+  -->
+  <meta name="referrer" content="no-referrer">
+
   <!-- Inline (empty) favicon to keep the deck self-contained and avoid a stray 404 request. -->
   <link rel="icon" href="data:,">
 
@@ -675,6 +717,29 @@
       position: static;
       height: auto;
       pointer-events: auto;
+    }
+    /* F-CDN-019, part 2b — make the promoted document actually SCROLLABLE. Promoting the
+     * sections back into flow is necessary but not sufficient: `html, body { height: 100% }`
+     * above, combined with reveal.css's own `.reveal { height: 100%; overflow: hidden }`,
+     * leaves the 16 stacked sections (~11,900px tall) clipped inside a viewport-height box
+     * with no scrollbar. The reader would see the title slide and the top of slide 2 and
+     * have no way to reach the remaining 14 — including four of the five diagrams — which
+     * contradicts the very message the safety net logs ("Showing all slides as a plain
+     * scrolling document"). These rules hand the page back to normal document scrolling:
+     * `!important` on the `.reveal` declarations is required to beat reveal.css's (0,1,0)
+     * `.reveal` rule from the CDN stylesheet, which still applies because only the
+     * SCRIPT failed. Every declaration is scoped under html.reveal-unavailable, a class
+     * applied solely when reveal.js has demonstrably failed, so a healthy load — where the
+     * class is never added and reveal owns the viewport — is untouched by construction. */
+    html.reveal-unavailable,
+    html.reveal-unavailable body {
+      height: auto;
+      overflow: visible;
+    }
+    html.reveal-unavailable .reveal {
+      position: static !important;
+      height: auto !important;
+      overflow: visible !important;
     }
     /* F-CDN-019, part 3 — restore the dark-slide backdrops when reveal.js itself never
      * initialises. On a healthy load the four dark slides take their ground from reveal's
@@ -1472,6 +1537,7 @@ flowchart LR
             <tr><td>Startup wiring defects — router signature <code>SetupRouter()</code>, ticker <code>time.NewTicker(0)</code></td><td>Documented with exact locations for engineering follow-up</td></tr>
             <tr><td>API path disagreement across layers — <code>/vault</code> vs <code>/vaults</code></td><td>Reconciled in the API reference</td></tr>
             <tr><td>Outdated project README — wrong stack, dead links</td><td>Corrected in this documentation set — stack fixed to Go/Gin/PostgreSQL/Redis and dead links resolved</td></tr>
+            <tr><td>This deck's diagram library is pinned to a version carrying 25 published advisories — all moderate or low</td><td>Disclosed in full; not exploitable here — fixed diagrams, no viewer input. Upgrading requires lifting the mandated pin</td></tr>
           </tbody>
         </table>
         <div class="icon-row">
@@ -1479,7 +1545,7 @@ flowchart LR
           <div><i data-lucide="git-branch" aria-hidden="true"></i><span>Reconciled</span></div>
           <div><i data-lucide="check-circle" aria-hidden="true"></i><span>Documented</span></div>
         </div>
-        <p class="source-note"><span class="src-label">Source</span>backend/cmd/server/main.go:L52; frontend/src/services/api.ts; README.md</p>
+        <p class="source-note"><span class="src-label">Source</span>backend/cmd/server/main.go:L52; frontend/src/services/api.ts; README.md; docs/security/security-model.md</p>
       </section>
 
       <!-- ================= SLIDE 12 — OBSERVABILITY (Fig O1) ================= -->
@@ -1665,6 +1731,66 @@ flowchart TD
        Both scripts carry a real sha384 SRI digest plus crossorigin="anonymous"; the
        Mermaid ESM entry is covered by the import map below, which is the only mechanism
        that can attach a digest to an ES module URL.
+
+       ------------------------------------------------------------------------
+       KNOWN-ADVISORY POSTURE OF THESE PINS (QA O2 · Issue 1) — disclosed, not hidden
+       ------------------------------------------------------------------------
+       Verified against the npm bulk advisory service and the GitHub Advisory API
+       on 2026-07-31:
+         * reveal.js 5.1.0 ......... 0 open advisories
+         * Lucide 0.460.0 .......... 0 open advisories
+         * Mermaid 11.4.0 .......... 6 open advisories, all MODERATE (CVSS v4
+             5.1-5.3): architecture-diagram iconText XSS (CVE-2025-54880),
+             sequence-diagram label XSS (CVE-2025-54881), state-diagram classDef
+             HTML injection (CVE-2026-41149), classDef CSS injection
+             (CVE-2026-41148), Gantt infinite-loop DoS (CVE-2026-41150), and
+             configuration CSS injection (CVE-2026-41159).
+         * DOMPurify 3.1.6 ......... 19 open advisories (15 moderate, 4 low;
+             highest CVSS v4 6.9). This is the sanitizer Mermaid 11.4.0 BUNDLES
+             as an ES-module sub-chunk, not a dependency this repository declares.
+             Its version was verified from the shipped bytes: the chunk the deck
+             loads embeds the marker version="3.1.6".
+
+       WHY THE PIN CANNOT SIMPLY BE RAISED: Mermaid 11.4.0 is mandated verbatim by
+       AAP Section 0.10.2, and its declared sanitizer range ("^3.0.11 <3.1.7") is
+       structurally incapable of resolving a patched DOMPurify — the earliest fix
+       is 3.2.4 and clearing every advisory needs 3.4.12. Moving to Mermaid 11.15.0
+       or newer clears both lists but requires an amendment to that mandate, so it
+       is Designed work rather than something this file may do. Disclosure is the
+       remediation actually available here.
+
+       WHY NONE OF THEM IS REACHABLE IN THIS DECK: every advisory above needs one
+       of two things this file never supplies — attacker-controlled diagram text,
+       or attacker-controlled sanitizer configuration.
+         * All five diagrams are static, committed, author-written flowcharts.
+           There is no reader input of any kind: no forms, no query parameters
+           consumed as content, no click directives, no dynamic label building.
+         * The deck contains zero architecture-beta, stateDiagram, gantt and
+           sequenceDiagram blocks, which removes four of the six Mermaid rows by
+           construction; every classDef is a static literal with no interpolation.
+         * DOMPurify is never called directly by this repository; it is reached
+           only inside Mermaid's own label path with Mermaid's own fixed options,
+           so the non-default modes these bypasses require (IN_PLACE,
+           SAFE_FOR_TEMPLATES, RETURN_DOM, USE_PROFILES, predicate-form
+           ADD_TAGS/ADD_ATTR, CUSTOM_ELEMENT_HANDLING, Trusted Types, caller
+           setConfig()/clearConfig()) are never in play.
+         * Four Implemented controls narrow it further: Mermaid
+           securityLevel:'antiscript', htmlLabels:false (labels become SVG text,
+           which cannot contain markup at all), the restrictive CSP in <head> with
+           no 'unsafe-eval', and the sha384 SRI digests below.
+         * The documentation set in docs/** is NOT exposed: it is rendered by
+           @mermaid-js/mermaid-cli 11.16.0, which resolves Mermaid 11.16.0 and
+           DOMPurify 3.4.12 — clear of every advisory above.
+
+       IF YOU REUSE THIS CDN BLOCK: the unreachability argument is a property of
+       this deliverable, not of the pinned versions. Rendering reader-authored
+       Mermaid (a wiki, a comment field, a diagram playground) makes several rows
+       genuinely reachable — upgrade Mermaid to 11.15.0 or newer first.
+
+       Per-advisory detail (GHSA ID, CVE, CVSS v4 score, affected range, first
+       patched release, precondition, reachability) and the commands that
+       reproduce this audit are in docs/security/security-model.md, section
+       "Documentation Toolchain Supply Chain and Advisory Posture".
        ========================================================================== -->
   <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"
           integrity="sha384-M/JtqCVlLcK9lwVnBnMXP0V577CBULkjodKsR/PITOe4MSKNbbwqCemEyluOw0+5"
@@ -1881,13 +2007,25 @@ flowchart TD
     //     request surface. SVG text labels cannot contain markup at all, so that surface
     //     no longer exists (verified: 0 <img> elements in every rendered diagram).
     //   * Mermaid 11.4.0 is a MANDATED pin (AAP Section 0.10.2) and cannot be upgraded,
-    //     so any Mermaid-level advisory cannot be patched by bumping the version.
-    //     RESIDUAL RISK is therefore accepted and compensated by (a) 'antiscript'
-    //     sanitisation, (b) htmlLabels:false removing the HTML-label surface entirely,
-    //     (c) the restrictive Content-Security-Policy in <head> that confines
-    //     executable/style/font origins to the pinned CDN + Google Fonts, and (d) the
-    //     static, no-user-input nature of the deck. A version bump (once the AAP pin is
-    //     lifted) plus SRI on the CDN assets is the Designed hardening.
+    //     so neither the 6 open Mermaid advisories nor the 19 against the DOMPurify
+    //     3.1.6 it bundles can be patched by bumping the version — the full list,
+    //     with per-advisory reachability, is in the third-party-libraries comment
+    //     above and in docs/security/security-model.md (QA O2 · Issue 1).
+    //     RESIDUAL RISK is therefore accepted and compensated by four IMPLEMENTED
+    //     controls — (a) 'antiscript' sanitisation, (b) htmlLabels:false removing the
+    //     HTML-label surface entirely, (c) the restrictive Content-Security-Policy in
+    //     <head> that confines executable/style/font origins to the pinned CDN +
+    //     Google Fonts, and (d) sha384 Subresource Integrity on all five pinned CDN
+    //     assets (F25-SRI-001; digests recomputed from the live jsdelivr responses and
+    //     tamper-rejection verified in an enforcing browser) — plus the static,
+    //     no-user-input nature of the deck.
+    //     What remains DESIGNED is only what this file cannot do by itself (QA O2 ·
+    //     Issue 2): the version bump to Mermaid 11.15.0 or newer, which needs an
+    //     amendment to the AAP pin, and the controls expressible solely as HTTP
+    //     response headers — frame-ancestors, CSP reporting, a nonce/hash policy that
+    //     drops 'unsafe-inline', and the header form of Referrer-Policy — none of
+    //     which a <meta>-only static file can deliver. SRI is NOT among them; it is
+    //     already in place on every pinned asset.
     // Declared as a plain object so the configuration is built unconditionally, before
     // (and independently of) the network fetch that provides the renderer able to consume
     // it. Every key below is byte-identical to the configuration this deck was verified
@@ -2172,8 +2310,9 @@ flowchart TD
     // every slide it intends to keep loaded already has its display and transform applied
     // and is measurable by the time this fires.
     // All four hooks are conditional on Stage 1 having succeeded, because Reveal.on() does
-    // not exist otherwise; the no-reveal path already hydrated icons in Stage 2, and the
-    // diagram fallbacks are driven by the loader's own catch rather than by a reveal event.
+    // not exist otherwise; the no-reveal path hydrated icons in Stage 2 already and gets
+    // its own diagram passes from the `else` branch below (QA O2 · INFO #3), so a blocked
+    // reveal.js bundle no longer leaves a healthy Mermaid idle with empty diagram slots.
     if (revealAvailable) {
       Reveal.on('ready', () => { renderDiagrams({ wholeDocument: true }); renderIcons(); });
       Reveal.on('slidechanged', () => { renderDiagrams(); renderIcons(); });
@@ -2191,6 +2330,58 @@ flowchart TD
         window.clearTimeout(rehydrateTimer);
         rehydrateTimer = window.setTimeout(() => { renderDiagrams(); renderIcons(); }, 300);
       });
+    } else {
+      // QA O2 · INFO #3 — THE COMPOUND FAULT: reveal.js blocked while Mermaid still loads.
+      //
+      // Every hook above is registered inside the branch guarded on Stage 1, because
+      // Reveal.on() does not exist otherwise. That was correct for a FULL CDN outage — no
+      // reveal, no Mermaid, and the loader's own .catch() paints the caption fallbacks —
+      // but it left one asymmetric case undrawn: reveal.js unavailable (blocked bundle,
+      // proxy rejection, or an SRI digest mismatch on that ONE file) while the Mermaid
+      // module imports successfully. Mermaid was then healthy and idle: no reveal event
+      // ever fired, so runMermaidIn() was never invoked, and the five diagram slots stayed
+      // EMPTY — not even the fallback captions appeared, because those are driven by the
+      // loader's rejection, which never happened. Measured before this branch existed:
+      // 0 rendered SVGs and 0 fallback captions on that path.
+      //
+      // Two passes close it, and both are safe:
+      //   1. An IMMEDIATE pass, which covers the full-outage shape of this path where
+      //      reveal.css is missing too: with no stylesheet to hide them, all 16 sections
+      //      are already in normal flow and every diagram is measurable right away.
+      //   2. A pass triggered when the classic safety net at the end of <body> stamps
+      //      `reveal-unavailable` on <html>. That is the moment the fallback rules promote
+      //      the sections back to display:block, and therefore the FIRST moment a diagram
+      //      inside them generates a layout box — Mermaid measures SVG text with
+      //      getComputedTextLength(), which is unavailable inside a display:none subtree,
+      //      so drawing any earlier would fail rather than help. A MutationObserver on
+      //      documentElement's class attribute is used instead of a timer so the render is
+      //      tied to the actual DOM change rather than to a duplicated delay constant, and
+      //      it disconnects after firing once.
+      // renderAllDiagrams() is deliberately used rather than renderDiagrams(): the latter
+      // consults inPrintView(), which dereferences the (here undefined) Reveal global. The
+      // pass is the same idempotent whole-document one proven for 'overviewshown', so the
+      // immediate attempt drawing nothing costs nothing — isMeasurable() simply skips the
+      // hidden nodes and leaves them unclaimed for the second pass. If Mermaid is ALSO
+      // unreachable, awaiting the loader yields null, the claims are released, and the
+      // caption fallbacks already painted by its .catch() remain the visible outcome.
+      const renderWithoutReveal = () => { renderAllDiagrams(); renderIcons(); };
+      renderWithoutReveal();
+      if (!document.documentElement.classList.contains('reveal-unavailable')) {
+        if (typeof MutationObserver === 'function') {
+          const flowObserver = new MutationObserver(() => {
+            if (document.documentElement.classList.contains('reveal-unavailable')) {
+              flowObserver.disconnect();
+              renderWithoutReveal();
+            }
+          });
+          flowObserver.observe(document.documentElement,
+            { attributes: true, attributeFilter: ['class'] });
+        } else {
+          // No MutationObserver (pre-2012 engines): fall back to one deterministic retry
+          // shortly after the safety net's own 8000ms deadline has elapsed.
+          window.setTimeout(renderWithoutReveal, 8250);
+        }
+      }
     }
 
     /* ----------------------------------------------------------------------------

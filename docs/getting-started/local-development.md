@@ -126,4 +126,5 @@ The repository contains **no `.gitignore` file anywhere** — not at the root an
 - [development.md](../contributing/development.md) — contribution workflow and the fuller CI walkthrough.
 - [testing.md](../contributing/testing.md) — test strategy and coverage targets.
 - [scaffold-vs-design.md](../architecture/scaffold-vs-design.md) — the complete Implemented/Provisioned/Designed reconciliation and defect catalog.
+- [security-model.md](../security/security-model.md#documentation-toolchain-supply-chain-and-advisory-posture) — the audited dependency inventory and open-advisory posture for the tools this workflow uses to build and validate documentation, and for the executive deck's pinned browser runtime. Read it alongside the two supply-chain notes in [Caveat 1](#1-no-committed-go-module-gomod--gosum) and [Caveat 2](#2-no-frontend-lockfile-but-ci-runs-npm-ci) above, which cover the *application's* unpinned dependency graph.
 - [index.md](../index.md) — documentation home and full navigation.

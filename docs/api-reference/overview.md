@@ -100,6 +100,8 @@ That lint reports two warnings under the tool's built-in recommended ruleset. Bo
 
 Enforcing this validation automatically is **Designed**: neither continuous-integration workflow validates the specification today, so the check is a manual documentation-build step. `Source: .github/workflows/backend-ci.yml, .github/workflows/frontend-ci.yml (no specification lint step present)`.
 
+**Toolchain advisory posture.** Both tools named above — `github.com/swaggo/swag@v1.16.6` and `@redocly/cli@1.25.11` — carry **zero** open security advisories at their pinned versions, and both run only at documentation-build time (never shipped to a reader). The audited inventory for every dependency this documentation set and the executive deck rely on, including the advisories that *do* affect the deck's pinned browser runtime, is enumerated in [Documentation Toolchain Supply Chain and Advisory Posture](../security/security-model.md#documentation-toolchain-supply-chain-and-advisory-posture), together with the commands to reproduce the audit. `Source: docs/security/security-model.md (documentation-dependency inventory)`.
+
 ## Request and Response Conventions
 
 The following conventions hold across the resources unless a resource page notes an exception:

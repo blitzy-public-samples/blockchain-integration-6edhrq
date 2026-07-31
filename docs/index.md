@@ -113,7 +113,7 @@ The backend exposes **18 REST endpoints** with no `/api/v1` prefix and a singula
 
 ### Security
 
-- [`security/security-model.md`](security/security-model.md) — Role-based access control (Admin/Manager/Operator/Auditor/API User), JWT with refresh tokens, multi-factor authentication, and encryption.
+- [`security/security-model.md`](security/security-model.md) — Role-based access control (Admin/Manager/Operator/Auditor/API User), JWT with refresh tokens, multi-factor authentication, and encryption. It also carries the [documentation toolchain supply chain and advisory posture](security/security-model.md#documentation-toolchain-supply-chain-and-advisory-posture) — the dependency inventory for this documentation set and the executive deck, with every open CVE/GHSA against the pinned CDN chain enumerated, reachability-assessed, and maturity-labeled.
 
 ### Training
 
@@ -153,3 +153,8 @@ Three divergences between the code, the frontend, and the design corpus are load
 ## Maintaining This Documentation
 
 This tree **aims** to attach an inline `Source: <path>:<locator>` citation to every technical claim so it can be re-verified against the code, and to label every capability with its maturity (**Implemented**, **Source-present (non-buildable)**, **Provisioned**, or **Designed**). Treat this as the maintenance standard rather than a guarantee that every line already meets it: where a citation or label is found to be missing, imprecise, or stale, correct it against the source. When a source file changes, update the pages that cite it and re-check their maturity labels against the authoritative [Maturity Legend](architecture/scaffold-vs-design.md#maturity-legend).
+
+Two classes of claim also go stale without any source file changing, because they are verified against external services rather than the repository. Re-verify both when reviewing this tree, and record the new verification date alongside the claim:
+
+- **Third-party advisory counts** for the pinned documentation and deck dependencies — re-run the audit commands in [Reproducing this audit](security/security-model.md#reproducing-this-audit) and update the tables there; advisory databases only grow.
+- **Runtime support windows** (Node.js and Go release status), which advance on published schedules — see the dated notes in [`contributing/development.md`](contributing/development.md#known-limitations).
