@@ -68,7 +68,7 @@ The designed target keeps the layering of **Fig BE1** but formalizes the boundar
 
 The following gaps are **documented honestly and are not fixed** by this deliverable; no `.go` source is modified. Each describes the code as it exists today, with a `Source:` locator and a maturity tag. Collectively they mean the backend **does not compile or run as checked in**. The consolidated Implemented / Provisioned / Designed matrix that catalogs these is maintained in [`scaffold-vs-design.md`](scaffold-vs-design.md).
 
-### Router signature mismatch (source-present defect; correction Designed)
+### Router signature mismatch — and two engines, neither of which works (source-present defect; correction Designed)
 
 The composition root calls `api.SetupRouter` with four arguments, but the router defines `SetupRouter()` with none, so the call does not compile. `Source: backend/cmd/server/main.go:L52`, `Source: backend/internal/api/routes.go:L9`.
 
@@ -76,6 +76,24 @@ The composition root calls `api.SetupRouter` with four arguments, but the router
 api.SetupRouter(router, dbConn, blockchainClients, custodianClient) // main.go:L52 — 4 args
 func SetupRouter() *gin.Engine                                       // routes.go:L9 — 0 args
 ```
+
+The arity is only the surface of the problem. **The two files each construct their own `gin.Engine`, and the composition root discards the one that has the routes on it.** Reading the two call sites together:
+
+| | Composition root's engine | Router's engine |
+|---|---|---|
+| Constructed at | `main.go:L50` — `router = gin.New()`, assigned to a package-level `var router *gin.Engine` (`L15`) | `routes.go:L10` — `router := gin.New()`, a **local** variable |
+| Middleware applied | `gin.Logger()`, `gin.Recovery()`, **and `middleware.AuthMiddleware()` engine-wide** via `setupMiddleware` (`L67`, `L70`, `L76`); a CORS TODO is left unimplemented (`L73`) | `gin.Logger()` and `gin.Recovery()` only (`L13-L14`) — no engine-wide auth |
+| Routes registered | **none** | **all 18**, across `/auth`, `/vault`, `/transactions`, `/signatures` (`L17-L51`) |
+| Returned / consumed | served by `router.Run(cfg.ServerAddress)` at `L60` | `return`ed per the declared `*gin.Engine` signature — and the return value is **discarded** at `main.go:L52` |
+
+`Source: backend/cmd/server/main.go:L15,L50-L52,L60,L65-L77`, `Source: backend/internal/api/routes.go:L9-L14,L17-L51`.
+
+Two independent consequences follow, and both are **latent** — the package does not compile, so neither is observable today:
+
+1. **No route is ever served.** `SetupRouter()` registers all 18 endpoints on its own local engine and hands it back, but `main.go:L52` uses the call as a statement and keeps serving its own empty engine. Every request to the running process would therefore fall through to Gin's default 404 handler regardless of path. Simply fixing the argument count would **not** fix this; the return value has to be captured (or `SetupRouter` has to accept and mutate the caller's engine).
+2. **The engine-wide auth registration and the per-route "Public" labels describe different engines.** `main.go:L76` applies `middleware.AuthMiddleware()` to *every* request on the served engine, with no exemption for the login and registration routes. On the **routed** engine the picture is the opposite: `POST /auth/login` and `POST /auth/register` carry no middleware at all, while `POST /auth/logout` opts in individually and the three resource groups opt in at group level. `Source: backend/internal/api/routes.go:L17-L22,L25,L35,L45`. So the **Public** maturity label used throughout the API reference is accurate **for the engine the routes are registered on** — which is the contract the service is written to serve — but the composition root's stated intent would make even login require a bearer token, i.e. an unauthenticated caller could never obtain one. Whoever reconciles the wiring must decide deliberately between the two, and if the engine-wide registration is kept, `AuthMiddleware` needs a public-path exemption for `/auth/login` and `/auth/register`.
+
+Both facts are recorded together as Defect 1 in [`scaffold-vs-design.md`](scaffold-vs-design.md#defect-catalog). The endpoint-by-endpoint auth expectations they qualify are documented in [`../api-reference/overview.md`](../api-reference/overview.md#authentication-model) and [`../api-reference/authentication.md`](../api-reference/authentication.md#post-authlogin).
 
 ### Database initialization mismatch (source-present defect; correction Designed)
 

@@ -125,6 +125,17 @@ paths:
         `middleware` package and the backend has no `go.mod`, so this operation
         does not run today.
         Source: backend/internal/api/handlers/auth.go:L21-L39.
+
+        Scope of "Public": no middleware is attached to this route in the router,
+        which is accurate for the engine `SetupRouter()` registers the 18 routes
+        on. The composition root separately applies `middleware.AuthMiddleware()`
+        engine-wide with no exemption for login or registration - but on its own
+        engine, which carries no routes because the routed engine that
+        `SetupRouter()` returns is discarded at the call site. This
+        specification documents the router's contract; the two-engine wiring
+        defect is catalogued as Defect 1.
+        Source: backend/internal/api/routes.go:L17-L22;
+        backend/cmd/server/main.go:L50-L52,L60,L76.
       security: []
       requestBody:
         required: true
@@ -170,8 +181,13 @@ paths:
         Registers a new user. The route is registered by the router, but no
         `Register` handler method is defined in the readable handler source, so
         this operation is **Designed** (target behavior; request/response shapes
-        are inferred). Public — no authentication required.
-        Source: backend/internal/api/routes.go:L20.
+        are inferred). Public — no authentication required, in the same
+        router-scoped sense as `POST /auth/login`: no middleware is attached to
+        this route, while the composition root's engine-wide
+        `middleware.AuthMiddleware()` registration applies to a separate engine
+        that carries no routes (Defect 1).
+        Source: backend/internal/api/routes.go:L20;
+        backend/cmd/server/main.go:L50-L52,L76.
       security: []
       requestBody:
         required: true
@@ -1355,6 +1371,30 @@ components:
         `TransactionService.CreateTransaction(userID, vaultID, toAddress, amount)`;
         the `userID` is resolved server-side from the JWT, not the body.
         Source: backend/internal/core/transaction/service.go:L29.
+
+        Request-field divergence (behavioral divergence; Designed to reconcile).
+        The only client that builds this payload sends the destination under the
+        key `recipientAddress`, not `toAddress`, and sends `amount` as a JSON
+        number rather than a decimal string: `TransactionForm` dispatches
+        `createTransaction({ vaultId, amount: parseFloat(amount),
+        recipientAddress })`, the thunk forwards it unchanged, and
+        `api.createTransaction` POSTs it verbatim.
+        Source: frontend/src/components/TransactionForm.tsx:L13,L34;
+        frontend/src/store/transactionSlice.ts:L10;
+        frontend/src/services/api.ts:L38-L42.
+        Because the handler binds with `ShouldBindJSON`, never enables
+        `DisallowUnknownFields`, and the repository declares only two
+        `binding:"required"` tags (both on the login body), the unrecognized key
+        would be ignored and the destination left at its zero value rather than
+        rejected with 400.
+        Source: backend/internal/api/handlers/transaction.go:L22-L26;
+        backend/internal/api/handlers/auth.go:L23-L24.
+        `toAddress` as specified here is authoritative for this API; the client
+        key is the side that must change. The mismatch is latent - neither layer
+        builds at this checkpoint, and `transaction.CreateTransactionRequest` is
+        referenced by the handler but declared nowhere in the readable source,
+        which is why this shape is inferred from the service signature.
+        Source: backend/internal/api/handlers/transaction.go:L22.
       required:
         - vaultId
         - toAddress
@@ -1365,10 +1405,15 @@ components:
           format: uuid
         toAddress:
           type: string
-          description: Destination on-chain address.
+          description: >-
+            Destination on-chain address. Authoritative field name. The frontend
+            client sends this value as `recipientAddress` instead, which the
+            server would silently ignore - see the schema description.
         amount:
           type: string
-          description: Arbitrary-precision decimal amount serialized as a string.
+          description: >-
+            Arbitrary-precision decimal amount serialized as a string. The
+            frontend client sends a JSON number (`parseFloat`) instead.
       example:
         vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
         toAddress: "<xrp-destination-address>"

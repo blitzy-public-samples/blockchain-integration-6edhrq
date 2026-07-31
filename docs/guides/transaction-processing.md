@@ -46,7 +46,7 @@ Transaction processing does not run today. Resolve these before any runtime beha
 4. **Model/helper gaps.** `db.TransactionStatusPending`/`db.TransactionStatusProcessed` constants are undefined in the `db` package, and `pkg/utils` (imported) does not exist `Source: backend/internal/core/transaction/service.go:L9,L46,L81`.
 5. **Logger absent.** The settlement processor imports the absent `backend/pkg/logger` and calls `db.GetPendingTransactions`/`db.UpdateTransaction`, which are undefined `Source: backend/internal/tasks/transaction_processor.go:L10,L35,L48`.
 6. **Processor/service signature mismatch.** The processor calls `ProcessTransaction(ctx, tx)` and reads `result.Status`, but the service defines `ProcessTransaction(id uuid.UUID) error` (see Troubleshooting, FM-4).
-7. **Frontend thunk/slice/hooks.** The page selects the plural `state.transactions` while the store registers the singular `transaction` reducer, imports typed hooks the store does not export, and dispatches a `createTransaction` thunk from a slice that must be built (see Troubleshooting).
+7. **Frontend thunk/slice/hooks.** The page selects the plural `state.transactions` while the store registers the singular `transaction` reducer, imports typed hooks the store does not export, and dispatches a `createTransaction` thunk from a slice that must be built (see Troubleshooting). Resolving these is necessary but not sufficient: the payload that thunk dispatches names the destination `recipientAddress` where the server reads `toAddress`, so submission would still not carry a destination (see [Request-field divergence](#request-field-divergence-recipientaddress-vs-toaddress-must-read)).
 
 ## Setup
 
@@ -71,6 +71,20 @@ There is no `/api/v1` prefix in the router `Source: backend/internal/api/routes.
 **Submit a transaction (UI) - as designed.** The Transaction Processing page is coded to dispatch `createTransaction` and list transactions from Redux state `Source: frontend/src/pages/TransactionProcessing.tsx:L28-L29`, rendering the `TransactionForm` and `TransactionList` components. It does not run today: the page selects an undefined slice (`state.transactions`) and imports typed hooks the store does not export (see Troubleshooting and Build blocker 7).
 
 **Async settlement (command/settlement split).** After submission, a transaction is `Pending` until the settlement path runs. The intended flow is: the processor reads pending transactions, calls the settlement path, updates the record, and caches the result in Redis `Source: backend/internal/tasks/transaction_processor.go:L34-L55`. The cache entry is written under key `tx:<id>` with a TTL of `0`, meaning no expiry `Source: backend/internal/tasks/transaction_processor.go:L55`. This sequence is drawn as `Fig B2 - Transaction Create + Async Settlement` in [Data Flow](../architecture/data-flow.md).
+
+### Request-field divergence: `recipientAddress` vs `toAddress` (must-read)
+
+The submission payload and the server's request contract disagree on the **name of the destination-address field**, and on the **type of the amount**:
+
+| Layer | Destination field | Amount type | Source |
+|-------|-------------------|-------------|--------|
+| Frontend form and thunk | `recipientAddress` | JSON number (`parseFloat`) | `Source: frontend/src/components/TransactionForm.tsx:L13,L34` |
+| Frontend API client (POSTs the object verbatim) | `recipientAddress` | JSON number | `Source: frontend/src/store/transactionSlice.ts:L10`, `Source: frontend/src/services/api.ts:L38-L42` |
+| Backend service (authoritative) | `toAddress` | decimal string (`decimal.Decimal`) | `Source: backend/internal/core/transaction/service.go:L29,L35`, `Source: backend/internal/db/schema.go:L52` |
+
+**Maturity: Designed reconciliation — and it would fail silently.** The form keeps the destination in a `recipientAddress` state variable and dispatches `createTransaction({ vaultId, amount: parseFloat(amount), recipientAddress })`; the thunk forwards that object unchanged and the client POSTs it as-is. On the server the handler binds with `c.ShouldBindJSON`, `DisallowUnknownFields` is never enabled, and the entire repository declares just two `binding:"required"` tags (both on the login body) `Source: backend/internal/api/handlers/transaction.go:L22-L26`, `Source: backend/internal/api/handlers/auth.go:L23-L24`. An unrecognized `recipientAddress` key is therefore **ignored rather than rejected**: the request would pass binding and reach the service with an empty destination address instead of returning `400 Bad Request`, so the user-visible symptom would be a transaction that was accepted but addressed nowhere — not a validation error at the form.
+
+`toAddress` is authoritative (it is the service parameter, the value handed to the blockchain client, and the field assigned on the persisted record), so the **client** key is the side that must change. Two related notes: the destination column does not exist either — `ToAddress` is absent from the `Transaction` entity, recorded in [Data Model](../architecture/data-model.md#gap-notes) — and the mismatch is **latent today**, because neither layer builds and `transaction.CreateTransactionRequest` is referenced by the handler but declared nowhere in the readable source. Documented, not fixed. Tracked as Defect 24 in [Scaffold vs Design](../architecture/scaffold-vs-design.md#defect-catalog); the field contract itself is documented in [Transactions API Reference](../api-reference/transactions.md#post-transactionscreate).
 
 ### Status-vocabulary divergence (must-read)
 

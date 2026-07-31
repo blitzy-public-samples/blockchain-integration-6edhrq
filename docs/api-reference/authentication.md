@@ -25,6 +25,8 @@ The consolidated maturity reconciliation between the design corpus and the on-di
 
 `Source: backend/internal/api/routes.go:L19-L21`.
 
+> **What `Public` means here (and one contradiction it hides).** `Public` denotes that **no middleware is attached to the route in the router** — true for `/auth/login` and `/auth/register`, which are declared inside the `/auth` group without a middleware argument, while `/auth/logout` opts in individually. `Source: backend/internal/api/routes.go:L17-L22`. The composition root, however, applies `middleware.AuthMiddleware()` **engine-wide** with no public-path exemption, which would gate login itself behind a token the caller cannot yet hold. `Source: backend/cmd/server/main.go:L76`. The two statements do not conflict at runtime today only because they configure **two different engines**: the engine `main.go` builds and serves has the global middleware but **no routes**, while the engine `SetupRouter()` registers all 18 routes on is **returned and then discarded**. `Source: backend/cmd/server/main.go:L50-L52,L60`, `Source: backend/internal/api/routes.go:L9-L10`. This reference documents the **router's** contract, which is what the service is written to serve. The wiring defect is analyzed in [`../architecture/backend.md`](../architecture/backend.md#router-signature-mismatch--and-two-engines-neither-of-which-works-source-present-defect-correction-designed) and catalogued as Defect 1 in [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md#defect-catalog).
+
 ## POST /auth/login
 
 **Maturity:** Source-present (non-buildable). **Auth:** Public — no middleware is attached to this route. `Source: backend/internal/api/routes.go:L19`.

@@ -219,6 +219,18 @@ gorm.Model                                  // embeds ID uint, CreatedAt, Update
 ID uuid.UUID `gorm:"type:uuid;primary_key"` // redeclares ID as uuid.UUID (conflicts)
 ```
 
+### Fields the services write but no entity declares (source-present defect)
+
+Three fields are written — and in one case read back — by the core services, yet are declared on **no** entity in `schema.go`. Every composite literal that sets them, and every read of them, is an unknown-field reference that fails to compile, so these are additional compile-blocking faults on top of the undefined `gorm.JSONMap` above.
+
+| Field | Written / read by | Declared on | Consequence |
+|-------|-------------------|-------------|-------------|
+| `ToAddress` | the `db.Transaction{…}` literal in `TransactionService.CreateTransaction`. `Source: backend/internal/core/transaction/service.go:L44`. | **Nowhere.** `Transaction` declares only `ID`, `UserID`, `VaultID`, `Status`, `BlockchainType`, `TxHash`, `Amount`, `Metadata`, `CreatedAt`, `UpdatedAt`. `Source: backend/internal/db/schema.go:L44-L56`. | The transaction's destination address has no column, so a created transaction could not record where it was headed. |
+| `RawTx` | set in that same literal, then read back by `ProcessTransaction` and handed to the custodian for signing. `Source: backend/internal/core/transaction/service.go:L47,L71`. | **Nowhere** — same entity, same field list. | The unsigned payload that the asynchronous settlement path must sign is never persisted, so settlement has nothing to resume from. |
+| `DataToSign` | the `db.Signature{…}` literal in `SignatureService.RequestSignature`. `Source: backend/internal/core/signature/service.go:L29`. | **Nowhere.** `Signature` declares only `ID`, `UserID`, `VaultID`, `Status`, `RawSignature`, `Metadata`, `CreatedAt`, `UpdatedAt`. `Source: backend/internal/db/schema.go:L58-L68`. | The payload submitted for signing is never persisted, so a signature record cannot be audited against what was actually signed. |
+
+Note the asymmetry the gap creates: `Signature` persists the signing **output** (`RawSignature`) but not its **input** (`DataToSign`), and `Transaction` persists the settled `TxHash` but neither the destination (`ToAddress`) nor the unsigned payload (`RawTx`) that produced it. The three fields consequently appear in the **API** contract — `toAddress` is a documented required field on `POST /transactions/create` (see [`../api-reference/transactions.md`](../api-reference/transactions.md#post-transactionscreate)) — while existing nowhere in the **data** model, and the asynchronous settlement and signature-polling loops both depend on state that no column holds. Declaring the three fields is therefore a prerequisite for the command/settlement split to work end to end. Catalogued as part of **Defect 7** in [`scaffold-vs-design.md`](scaffold-vs-design.md#defect-catalog).
+
 ### Status vocabulary mismatch (note)
 
 The backend Transaction status vocabulary is `Pending` / `Processed`, set via the `db.TransactionStatusPending` and `db.TransactionStatusProcessed` constants. `Source: backend/internal/core/transaction/service.go:L46,L81`. The frontend Zod schema, however, validates a different vocabulary of `Pending` / `Completed` / `Failed`. `Source: frontend/src/schema/transaction.ts:L10`. This divergence is detailed in [`scaffold-vs-design.md`](scaffold-vs-design.md) and reflected in the endpoint documentation at [`../api-reference/transactions.md`](../api-reference/transactions.md).

@@ -1251,9 +1251,8 @@
         <span class="eyebrow">Before</span>
         <h2>Current Scaffold — Source-Present, Not Buildable</h2>
         <p class="fig-caption"><strong>Figure A1</strong> maps the backend as wired today: the request path
-          (router&nbsp;&rarr;&nbsp;services&nbsp;&rarr;&nbsp;database) is source-present but does not compile, while
-          dashed boxes mark packages that are imported but absent and the wiring that breaks startup — so nothing
-          runs today.</p>
+          (router&nbsp;&rarr;&nbsp;services&nbsp;&rarr;&nbsp;database) is source-present but does not compile, and
+          dashed boxes mark absent packages and startup-breaking wiring. Nothing runs today.</p>
         <pre class="mermaid">
 flowchart TD
     accTitle: Current backend scaffold, as wired today
@@ -1368,11 +1367,10 @@ flowchart TD
       <section data-background-color="#FFFFFF">
         <span class="eyebrow">Honest Status</span>
         <h2>What's Real Today</h2>
-        <p class="fig-caption">Three maturity labels are used throughout: <strong>Implemented</strong> —
-          here always qualified <em>non-buildable</em>, because the code exists but has no build manifest and does
-          not compile; <strong>Provisioned</strong> — declared in valid config but not deployed, which nothing
-          reaches today since <code>terraform validate</code> fails; and <strong>Designed</strong> — planned and
-          absent. Nothing runs today.</p>
+        <p class="fig-caption">Three status labels run through this deck. <strong>Implemented</strong> here always means
+          <em>non-buildable</em> — code exists, no build manifest. <strong>Provisioned</strong> would mean
+          valid-but-undeployed config, which nothing reaches because <code>terraform validate</code> fails.
+          <strong>Designed</strong> means planned and absent. Nothing runs today.</p>
         <table>
           <thead>
             <tr><th>Capability</th><th>Status</th></tr>
@@ -1405,7 +1403,9 @@ flowchart TD
             <tr><td>Signature</td><td>Signing artifact</td><td>Belongs to a Vault &amp; User</td></tr>
           </tbody>
         </table>
-        <p class="fig-caption">Relationships shown are logical Go-struct associations, not database foreign-key constraints — none are enforced at the schema level today. A documented data-model cleanup item: each entity carries two identifiers (embedded <code>gorm.Model</code> plus a redeclared <code>ID uuid.UUID</code>), flagged for engineering follow-up.</p>
+        <p class="fig-caption">Relationships shown are logical Go-struct associations, not enforced database
+          constraints. One documented cleanup item: every entity carries two identifiers, an embedded
+          <code>gorm.Model</code> alongside a redeclared <code>ID uuid.UUID</code> field, flagged for engineering follow-up.</p>
         <p class="source-note"><span class="src-label">Source</span>backend/internal/db/schema.go:L11-L68</p>
       </section>
 
@@ -2118,10 +2118,25 @@ flowchart TD
     const inPrintView = () =>
       typeof Reveal.isPrintView === 'function' && Reveal.isPrintView();
 
-    const renderDiagrams = ({ printLayoutReady = false } = {}) => {
+    // `wholeDocument` widens a single pass from the current slide to every measurable
+    // diagram in the deck. It exists for the 'ready' hook: AAP 0.9.3 requires that the deck
+    // "opens in a browser, renders all Mermaid diagrams and Lucide icons", and the five
+    // diagram slides (3, 4, 10, 12, 13) carry no other non-text visual, so a current-slide
+    // pass at 'ready' — where the current slide is the title slide and holds no diagram —
+    // left all five unrendered until the viewer navigated to them, momentarily reducing
+    // those slides to text-only against the "no text-only slides" constraint. The print
+    // gate below is deliberately checked FIRST and is untouched, so ?print-pdf still
+    // no-ops until 'pdf-ready' (F-PRINT-013); and the widened pass is the same
+    // `runMermaidIn(document)` already proven safe for 'overviewshown' (F-OVERVIEW-015),
+    // whose isMeasurable() filter skips any slide reveal has unloaded and whose
+    // data-processed/claimedNodes filters make every later pass an idempotent no-op.
+    const renderDiagrams = ({ printLayoutReady = false, wholeDocument = false } = {}) => {
       if (inPrintView()) {
         // Deliberately a no-op until 'pdf-ready' — see note 3 above.
         return printLayoutReady ? runMermaidIn(document) : Promise.resolve();
+      }
+      if (wholeDocument) {
+        return runMermaidIn(document);
       }
       const current = Reveal.getCurrentSlide();
       return current ? runMermaidIn(current) : Promise.resolve();
@@ -2138,9 +2153,14 @@ flowchart TD
     // hook as soon as navigation brings them back into range.
     const renderAllDiagrams = () => runMermaidIn(document);
 
-    // Render the current slide's diagram(s) + all icons once the deck is ready, and
-    // again on every slide change (reveal.js reflows the DOM as slides enter/leave the
-    // view distance, so icons must be re-materialised and lazily-shown diagrams drawn).
+    // Render every measurable diagram + all icons once the deck is ready (wholeDocument,
+    // so the deck satisfies AAP 0.9.3's "renders all Mermaid diagrams" on open rather than
+    // drawing each figure only when its slide is first visited), and render again on every
+    // slide change, still current-slide-scoped: reveal.js reflows the DOM as slides enter and
+    // leave the view distance, so icons must be re-materialised and any diagram that the
+    // 'ready' pass skipped as unmeasurable (unloaded at that moment) is drawn when navigation
+    // brings it back into range. The data-processed/claimedNodes filters make the repeat
+    // passes over already-rendered figures no-ops.
     // 'pdf-ready' (F-PRINT-013) is the third required hook: with ?print-pdf, reveal.js
     // defers printView.activate() to the window load event — i.e. AFTER the 1ms 'ready'
     // dispatch — and never fires 'slidechanged', so 'pdf-ready' is the only point at
@@ -2155,7 +2175,7 @@ flowchart TD
     // not exist otherwise; the no-reveal path already hydrated icons in Stage 2, and the
     // diagram fallbacks are driven by the loader's own catch rather than by a reveal event.
     if (revealAvailable) {
-      Reveal.on('ready', () => { renderDiagrams(); renderIcons(); });
+      Reveal.on('ready', () => { renderDiagrams({ wholeDocument: true }); renderIcons(); });
       Reveal.on('slidechanged', () => { renderDiagrams(); renderIcons(); });
       Reveal.on('pdf-ready', () => { renderDiagrams({ printLayoutReady: true }); renderIcons(); });
       Reveal.on('overviewshown', () => { renderAllDiagrams(); renderIcons(); });

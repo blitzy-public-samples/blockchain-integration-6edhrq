@@ -30,7 +30,7 @@ A **custodial blockchain integration platform** whose domain is **vaults, signat
 | Database | PostgreSQL (`sqlx.Connect("postgres", …)`, `sslmode=disable`) | **Source-present (non-buildable)** connection code; PostgreSQL as system of record is **Designed** | `backend/internal/db/postgres.go:L15-L18` |
 | Cache / async status store | Redis via `go-redis/v8` | **Source-present (non-buildable)** | `backend/internal/db/redis.go:L5,L14-L18` |
 | Frontend | React 18.2.0 + TypeScript, Create React App (`react-scripts` 5.0.1), React Router DOM 6.11.1 | **Source-present (non-buildable)** | `frontend/package.json:L9-L12` |
-| Frontend state / validation / HTTP / charts | Redux Toolkit, Zod, Axios, and Chart.js — **used in source but not declared** in `package.json` | **Designed** (undeclared dependency) | `frontend/src/store/index.ts:L1`, `frontend/src/schema/transaction.ts:L1`, `frontend/src/services/api.ts:L1`, `frontend/src/components/Chart.tsx:L2-L3` |
+| Frontend state / validation / HTTP / charts / date formatting | `@reduxjs/toolkit`, `axios`, `chart.js`, `date-fns`, `react-chartjs-2`, `react-redux`, `zod` — **seven packages used in source, none declared** in `package.json` | **Designed** (undeclared dependencies) | `frontend/src/store/index.ts:L1`, `frontend/src/schema/transaction.ts:L1`, `frontend/src/services/api.ts:L1`, `frontend/src/components/Chart.tsx:L2-L3`, `frontend/src/utils/formatters.ts:L1`, `frontend/package.json:L5-L19` |
 | Blockchains & custodian | XRP Ledger, Ethereum, and Utxo Custodian signing | **Designed** | `backend/cmd/server/main.go:L8-L9` |
 
 This repository contains **no Hyperledger Fabric, no Solidity, and no GraphQL** — earlier revisions of this README referenced those technologies, but none are present in the codebase.
@@ -62,7 +62,7 @@ cd backend
 go build ./...   # Note: no go.mod is committed, so this is a scaffold and will NOT build as-is
 ```
 
-**Frontend (React / Create React App).** `Source: frontend/package.json:L20-L27` Installing dependencies does **not** make the frontend build: beyond the missing lockfile, the source uses undeclared dependencies (Redux Toolkit, Zod, Axios, Chart.js), references absent Redux slices, hooks, utilities and types, and has export/import mismatches, so `npm install` alone cannot produce a working build.
+**Frontend (React / Create React App).** `Source: frontend/package.json:L20-L27` Installing dependencies does **not** make the frontend build: beyond the missing lockfile, the source uses **seven** undeclared dependencies (`@reduxjs/toolkit`, `axios`, `chart.js`, `date-fns`, `react-chartjs-2`, `react-redux`, `zod`), references absent Redux slices, hooks, utilities and types, and has export/import mismatches, so `npm install` alone cannot produce a working build.
 
 ```bash
 cd frontend
