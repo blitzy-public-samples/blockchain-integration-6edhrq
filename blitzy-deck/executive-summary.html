@@ -1304,11 +1304,11 @@
           </div>
           <div class="kpi-card">
             <span class="kpi-icon" aria-hidden="true"><i data-lucide="alert-triangle" aria-hidden="true"></i></span>
-            <span class="kpi-value">16</span>
+            <span class="kpi-value">26</span>
             <span class="kpi-label">Defects documented honestly</span>
           </div>
         </div>
-        <p class="source-note"><span class="src-label">Source</span>62 files: repository root; 18 endpoints: backend/internal/api/routes.go:L9-L54; 5 entities: backend/internal/db/schema.go:L11-L68; 5 features: SRS VM/SG/TP/UA/MA-001; 5 observability pillars: docs/operations/observability.md; 16 defects: docs/architecture/scaffold-vs-design.md</p>
+        <p class="source-note"><span class="src-label">Source</span>62 files: repository root; 18 endpoints: backend/internal/api/routes.go:L9-L54; 5 entities: backend/internal/db/schema.go:L11-L68; 5 features: SRS VM/SG/TP/UA/MA-001; 5 observability pillars: docs/operations/observability.md; 26 defects: docs/architecture/scaffold-vs-design.md</p>
       </section>
 
       <!-- ================= SLIDE 3 — CURRENT SCAFFOLD (Fig A1) ================= -->
@@ -1706,7 +1706,35 @@ flowchart TD
         <p class="source-note"><span class="src-label">Source</span>backend/internal/api/handlers/auth.go; documentation/Technical Specifications.md &sect;SECURITY CONSIDERATIONS (Designed)</p>
       </section>
 
-      <!-- ================= SLIDE 16 — CLOSING ================= -->
+      <!-- ================= SLIDE 16 — ONBOARDING & CONTINUED DEVELOPMENT ================= -->
+      <section data-background-color="#FFFFFF">
+        <span class="eyebrow">Onboarding &amp; Next Steps</span>
+        <h2><span class="kpi-icon h2-icon" aria-hidden="true"><i data-lucide="rocket" aria-hidden="true"></i></span>How the Team Picks This Up</h2>
+        <table>
+          <thead>
+            <tr><th>Step</th><th>What a new engineer does</th><th>Written down in</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Install</td><td>Provision Go, Node, PostgreSQL and Redis by hand</td><td>getting-started/installation.md</td></tr>
+            <tr><td>Configure</td><td>Set the database, cache and token values</td><td>getting-started/configuration.md</td></tr>
+            <tr><td>Develop</td><td>Read the known build caveats before writing code</td><td>getting-started/local-development.md</td></tr>
+            <tr><td>Contribute</td><td>Follow the workflow, coding and testing standards</td><td>contributing/development.md</td></tr>
+          </tbody>
+        </table>
+        <ul>
+          <li>Every step is documented; onboarding does not depend on tribal knowledge.</li>
+          <li>The shipped bootstrap script reports success while installing nothing &mdash; documented, not trusted.</li>
+        </ul>
+        <!-- F8 (Rule 3, Section 0.10.2 — "how the team onboards and continues development"): this slide's
+             primary visual is the CSS-only step table, and the gradient accent bar below is likewise
+             CSS-only. Both survive a Lucide CDN outage, so the slide never degrades to text-only even
+             though the h2 icon would disappear. -->
+        <hr class="accent-bar">
+        <p class="source-note"><span class="src-label">Source</span>docs/getting-started/installation.md &sect;Prerequisites; docs/getting-started/configuration.md; docs/getting-started/local-development.md &sect;Build Caveats; docs/contributing/development.md</p>
+      </section>
+
+
+      <!-- ================= SLIDE 17 — CLOSING ================= -->
       <section class="slide-closing" data-background-color="#1A105F">
         <div class="slide-body">
           <span class="eyebrow">The Takeaway</span>

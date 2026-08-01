@@ -146,10 +146,19 @@ additional setup beyond the commands above:
   strictly from a committed lockfile; but no `package-lock.json` is committed
   (`Source: frontend/ (no package-lock.json present)`), so a local `npm install`
   must be run first to generate one. Neither workflow declares a working
-  directory either, so in CI `npm ci` runs at the repository root — where there
-  is no `package.json` — and fails before the lockfile is ever consulted
+  directory either, so in CI `npm ci` runs at the repository root — where
+  neither a `package.json` nor a `package-lock.json` exists, so the step fails
+  there under any npm. *Which* file npm names depends on the npm major: the
+  workflow's `node-version: '14.x'` pin provisions npm 6.14.18, which reads the
+  manifest first and aborts `ENOENT` on the absent `package.json` with exit code
+  254, whereas a modern npm (7 and later, measured on 11.18.0) validates the
+  lockfile first and aborts `EUSAGE` naming `package-lock.json` with exit code 1
+  whether or not a manifest is present
   (`Source: .github/workflows/frontend-ci.yml:L18,L29,L40`, no
-  `working-directory` or `defaults` key). **Maturity: Provisioned**
+  `working-directory` or `defaults` key;
+  `Source: .github/workflows/frontend-ci.yml:L14-L17,L25-L28,L36-L39`, the three
+  `node-version: '14.x'` pins; npm exit codes and messages measured under npm
+  6.14.18 and npm 11.18.0 on 2026-08-01). **Maturity: Provisioned**
   (dependencies declared, lockfile absent) / **Designed** (working directory not
   declared in either workflow).
 
