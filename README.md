@@ -110,9 +110,9 @@ Full documentation lives in the [`docs/`](docs/index.md) tree:
 - **[Architecture Overview](docs/architecture/overview.md)** — current-vs-target (before/after) architecture diagrams
 - **[API Reference](docs/api-reference/overview.md)** — all 18 endpoints, plus the machine-readable [OpenAPI specification](docs/api-reference/openapi.yaml)
 - **[Observability](docs/operations/observability.md)** — logging, tracing, metrics, health checks, and the dashboard template
-- **[System Administration](docs/operations/system-administration.md)** — consolidated operator/admin guide (configuration, deployment, database, backup, monitoring, security, incident response); fulfills Software Project Proposal DELIVERABLES item 6 `Source: documentation/Software Project Proposal.md:L401-L402`
+- **[Operations Runbook](docs/operations/runbook.md)** — alerts and failure modes, plus the consolidated [system administration entry point](docs/operations/runbook.md#system-administration-entry-point) (configuration, deployment, database, backup, monitoring, security, incident response); delivers Software Project Proposal DELIVERABLES item 6 `Source: documentation/Software Project Proposal.md:L401-L402`
 - **[Security Model](docs/security/security-model.md)** — RBAC, JWT, MFA, and encryption
-- **[Training Materials](docs/training/training-materials.md)** — role-based onboarding course and written guides for common operations; fulfills Software Project Proposal DELIVERABLES item 10 `Source: documentation/Software Project Proposal.md:L419-L421`
+- **[Role-Based Onboarding and Training Paths](docs/index.md#role-based-onboarding-and-training-paths)** — the per-role reading order over this documentation set; delivers Software Project Proposal DELIVERABLES item 10 (*written guides for common operations*; the companion *video tutorials* item remains **Designed**) `Source: documentation/Software Project Proposal.md:L419-L421`
 - **[Scaffold vs. Design Reconciliation](docs/architecture/scaffold-vs-design.md)** — the honest maturity matrix
 - **[Executive Summary](blitzy-deck/executive-summary.html)** — a self-contained presentation for leadership
 

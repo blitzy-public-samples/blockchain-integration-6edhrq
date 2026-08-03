@@ -4,6 +4,53 @@ This runbook catalogs the alerts and failure modes for the **Blockchain Integrat
 
 Maturity tags follow the project convention (identical to [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md)): **Implemented** (present AND compiles AND runs today — reserved, and nothing here qualifies at this checkpoint), **Source-present (non-buildable)** (the code exists but does not compile, so no runtime behavior may be asserted), **Provisioned** (infrastructure exists and would validly apply, but is not wired), **Designed** (specified but absent today). The one signal genuinely observable today is the **build failure itself**. See [`observability.md`](observability.md) for the signal inventory (`Fig O1`) and [`dashboard-template.json`](dashboard-template.json) for the panels referenced below.
 
+This page also serves as the platform's **system-administration entry point** (see the section immediately below), which is the artifact the Software Project Proposal lists under its User-Manuals deliverable. `Source: documentation/Software Project Proposal.md:L401-L402`
+
+## System administration entry point
+
+This section is the consolidated orientation for the operators, DevOps engineers, and system administrators the SRS names as a primary audience. `Source: documentation/Software Requirements Specifications (SRS).md:L21` It maps each administration area to the page that authoritatively documents it rather than duplicating that page, and it records the maturity an administrator will actually encounter.
+
+> **Administration is Designed today.** Because the application does not build, run, authenticate, or deploy from this repository as-is, every procedure referenced below describes the **intended** administration of the running system and is **Designed** unless labeled otherwise. The procedures become executable once the defects catalogued in [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md#defect-catalog) are resolved. The items that exist and validly apply today (for example the committed CI workflow files) are labeled **Provisioned**.
+
+**Components an administrator operates.** The platform is a two-tier application with backing data stores and AWS infrastructure:
+
+| Component | Role | Maturity | Authoritative page |
+|-----------|------|----------|--------------------|
+| Go/Gin backend | HTTP API over 18 REST endpoints | Source-present (non-buildable) | [`../architecture/backend.md`](../architecture/backend.md) `Source: backend/internal/api/routes.go:L9-L54` |
+| PostgreSQL | Primary datastore (Designed system of record) | Designed (no compiling schema/migrations) | [`../architecture/data-model.md`](../architecture/data-model.md) `Source: backend/internal/db/postgres.go:L15-L18` |
+| Redis | Cache and async status store | Designed (no wired client) | [`observability.md`](observability.md) `Source: backend/internal/db/redis.go:L14-L18` |
+| React 18 dashboard | Operator/end-user UI | Source-present (non-buildable) | [`../architecture/frontend.md`](../architecture/frontend.md) `Source: frontend/package.json` |
+| Terraform (AWS ECS topology) | Infrastructure definition | Declared-but-invalid / Designed (does not validate or apply) | [`../guides/deployment.md`](../guides/deployment.md) `Source: infrastructure/terraform/main.tf` |
+| Docker images | Backend/frontend container builds | Declared-but-invalid (build depends on absent module/lock files) | [`../guides/deployment.md`](../guides/deployment.md) `Source: infrastructure/docker/Dockerfile.backend` |
+| GitHub Actions CI | Build/test/lint pipelines | Provisioned (committed, structurally valid, do not pass) | [`../contributing/development.md`](../contributing/development.md) `Source: .github/workflows/backend-ci.yml` |
+
+**Administration areas, in the order an administrator meets them.** Each bullet names the authoritative page and the one fact that most changes an administrator's expectations:
+
+1. **Configuration.** All runtime settings are **Designed** to arrive as environment variables — the PostgreSQL DSN (host, port, user, password, database, `sslmode`), Redis settings, and JWT secrets. Authoritative reference: [`../getting-started/configuration.md`](../getting-started/configuration.md). No `.env.example` is committed, so there is no template to copy, and the DSN hard-codes `sslmode=disable`, which must be overridden for any non-local environment. `Source: backend/internal/db/postgres.go:L15-L18`
+2. **Deployment and release.** Deployment is **Designed** onto AWS ECS Fargate (VPC, ALB, RDS PostgreSQL, ElastiCache Redis). Authoritative reference: [`../guides/deployment.md`](../guides/deployment.md). The Terraform configuration is **Declared-but-invalid** — it does not validate or apply as-is (for example it references an undeclared `var.postgres_password` where the declared variable is `rds_password`) — and the container images do not build because they depend on absent module and lock files. `Source: infrastructure/terraform/main.tf`, `Source: infrastructure/docker/Dockerfile.backend:L8`
+3. **Database and cache.** PostgreSQL is the **Designed** system of record for the five entities (`Organization`, `User`, `Vault`, `Transaction`, `Signature`); no compiling schema, repository, or migration exists, so schema administration is **Designed**. `Source: backend/internal/db/schema.go:L11-L68` Redis is the **Designed** cache and async status store; the signature path is designed to cache signature material under a 24-hour TTL, which is a retention concern because that material is sensitive. `Source: backend/internal/db/redis.go:L14-L18`, `Source: docs/guides/signature-management.md`
+4. **Backup and recovery.** **Designed.** The Terraform RDS definition sets `skip_final_snapshot = true`, which would discard the final snapshot on deletion and cause data loss; a snapshot and point-in-time-recovery policy must be established before production use (deployment-guide gap TF-6). `Source: infrastructure/terraform/main.tf`
+5. **Monitoring, health, and readiness.** Authoritative references: [`observability.md`](observability.md), [`dashboard-template.json`](dashboard-template.json), and the alert catalog below. **Reused today (emission-only, source-present non-buildable):** Gin access logging and panic recovery plus worker structured error logging. **Added (Designed):** correlation-ID propagation, distributed tracing, `/metrics`, and `/health` + `/ready`; there is no health or readiness route and no container `HEALTHCHECK` today, so liveness administration is **Designed** — see [FM-5](#fm-5--container-health-check-gap). `Source: backend/internal/api/routes.go:L9-L54`
+6. **Security administration.** Authoritative reference: [`../security/security-model.md`](../security/security-model.md). **Designed** end-to-end: no enforcement runs because the `AuthService`, the authentication middleware, and the config package are absent. Organization API keys must be stored as a hash or verifier, revealed exactly once at creation, kept out of read responses, and redacted from logs — the schema currently carries a plaintext `APIKey` string. `Source: backend/internal/db/schema.go:L11-L68` No KMS, Secrets Manager, or HSM is wired in Terraform, so secret administration is **Designed**. `Source: infrastructure/terraform/main.tf`
+7. **User and access administration.** User provisioning, role assignment, MFA, session management, and access logging map to UA-001 and are **Designed**; five roles (Admin, Manager, Operator, Auditor, API User) sit on a plain `User.Role` string with no database constraint and no enforcing middleware. `Source: documentation/Software Requirements Specifications (SRS).md:L428-L433`, `Source: backend/internal/db/schema.go:L27` Task-level procedures — including setup and troubleshooting — are in [`../api-reference/authentication.md`](../api-reference/authentication.md#user-authentication--authorization-guide-ua-001).
+8. **Incident response.** **Designed**, and grounded in the alert catalog and failure modes FM-1 … FM-5 below. The two failure modes an administrator must know first: the transaction processor's ticker interval is uninitialized and would panic at startup once the service builds, and the composition-root/router signature mismatch prevents the service from wiring at all today. `Source: backend/internal/tasks/transaction_processor.go:L13-L16`, `Source: backend/cmd/server/main.go:L52`, `Source: backend/internal/api/routes.go:L9`
+
+**Administration readiness summary.**
+
+| Administration area | Maturity | Authoritative page |
+|---------------------|----------|--------------------|
+| Configuration | Designed (no `.env.example`; `sslmode=disable` in source) | [configuration.md](../getting-started/configuration.md) |
+| Deployment / release | Declared-but-invalid / Designed | [deployment.md](../guides/deployment.md) |
+| Database / cache | Designed | [data-model.md](../architecture/data-model.md), [observability.md](observability.md) |
+| Backup / recovery | Designed (TF-6 data-loss gap) | [deployment.md](../guides/deployment.md) |
+| Monitoring / health | Reused emission-only (non-buildable) + Designed additions | [observability.md](observability.md), [FM-5](#fm-5--container-health-check-gap) |
+| Security / secrets | Designed | [security-model.md](../security/security-model.md) |
+| User / role administration | Designed | [security-model.md](../security/security-model.md), [authentication.md](../api-reference/authentication.md#user-authentication--authorization-guide-ua-001) |
+| Incident response | Designed | [Alert catalog](#alert-catalog) and FM-1 … FM-5 below |
+| CI pipelines | Provisioned (do not pass) | [development.md](../contributing/development.md) |
+
+The single authoritative Implemented / Provisioned / Designed matrix and the full defect catalog are maintained in [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md); this section defers to it for the canonical maturity of every capability above.
+
 ## Alert catalog
 
 | Alert | Trigger condition | Maturity of signal | Failure mode |
@@ -68,5 +115,9 @@ Maturity tags follow the project convention (identical to [`../architecture/scaf
 
 - [`observability.md`](observability.md) — the five observability pillars and `Fig O1` (current vs designed).
 - [`dashboard-template.json`](dashboard-template.json) — dashboard panels referenced by these alerts.
+- [`../index.md#role-based-onboarding-and-training-paths`](../index.md#role-based-onboarding-and-training-paths) — the role-based onboarding and training paths, including the operator path through this runbook.
+- [`../guides/deployment.md`](../guides/deployment.md) — deployment topology, the Terraform reconciliation, and the infrastructure security and data-loss gaps referenced from the [system administration entry point](#system-administration-entry-point).
+- [`../security/security-model.md`](../security/security-model.md) — authentication, RBAC, secrets, and encryption.
+- [`../getting-started/configuration.md`](../getting-started/configuration.md) — environment variables and connection settings.
 - [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md) — full maturity matrix reconciling scaffold versus design.
 - [`../index.md`](../index.md) — documentation landing page.

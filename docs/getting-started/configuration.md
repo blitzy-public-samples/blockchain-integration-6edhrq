@@ -57,6 +57,94 @@ The initializer is coded to open the connection with `sqlx.Connect("postgres", c
 
 **Security note — `sslmode`.** The DSN hard-codes `sslmode=disable`. `Source: backend/internal/db/postgres.go:L15`. This is acceptable for local development, but it transmits credentials and data without TLS, so a stricter mode such as `require` or `verify-full` is appropriate for any non-local environment. The platform's encryption-in-transit posture is described in the [security model](../security/security-model.md).
 
+### DSN Quoting and Escaping (libpq keyword/value form)
+
+The DSN is built by **raw string concatenation with no quoting and no escaping** of any interpolated value:
+
+```go
+connStr := "host=" + cfg.DBHost + " port=" + cfg.DBPort + " user=" + cfg.DBUser + " password=" + cfg.DBPassword + " ..."
+```
+
+`Source: backend/internal/db/postgres.go:L15`. The string produced is the PostgreSQL **keyword/value** connection-string form, in which values are whitespace-delimited and two characters are escape-significant. `Source: PostgreSQL 15 documentation, "Connection Strings" — postgresql.org/docs/15/libpq-connect.html#LIBPQ-CONNSTRING`. Because L15 inserts `cfg.DBPassword` verbatim, any password containing whitespace, a single quote, or a backslash changes how the **whole** DSN parses. The rules below therefore constrain what a `DB_PASSWORD` value may contain, not merely how it is typed.
+
+**A space terminates a value — it does not need to be the last character to break parsing.** With a password of `Space Pass#1`, the concatenated DSN becomes `... password=Space Pass#1 dbname=postgres ...`, and the parser reads `Space` as the password, then tries to read `Pass#1` as the next *keyword*:
+
+```text
+missing "=" after "Pass#1" in connection info string
+```
+
+Two forms parse correctly — single-quoting the value, or backslash-escaping each space:
+
+```text
+password='Space Pass#1'
+password=Space\ Pass#1
+```
+
+**`#` is not a comment or metacharacter in a DSN.** A password of `Ha#sh` connects with no quoting at all in both the keyword/value and URI forms. When a `#` password fails, the cause is an adjacent space or quote, never the `#` itself — a distinction worth checking before rewriting a working credential.
+
+**Inside single quotes, `'` and `\` must each be escaped with a backslash.** For a password of `it's\hard`, only the fully escaped forms authenticate:
+
+| DSN fragment | Result |
+|--------------|--------|
+| `password='it\'s\\hard'` | connects — both metacharacters escaped |
+| `password=it\'s\\hard` | connects — escaping works unquoted too |
+| `password='it\'s\hard'` | **authentication failure** — `\h` collapses to `h`, sending `it'shard` |
+| `password=it's\hard` | **authentication failure** — same collapse, unquoted |
+
+**The backslash failure mode is silent, and that is the dangerous one.** An unescaped backslash is consumed as an escape character rather than rejected, so the parser succeeds and the driver sends a *different* password than intended. The server answers `password authentication failed for user "…"`, which reads as a wrong-credential problem and sends operators to reset a password that was in fact correct. A space produces a loud parse error; a backslash produces a misleading authentication error.
+
+**A quoted-empty password means "not supplied", not "empty".** `password=''` does not send an empty password — libpq falls back to its normal password sources and prompts interactively:
+
+```text
+Password for user spaceuser:
+```
+
+A backend process with no controlling terminal cannot answer that prompt, so this manifests as a startup hang or an immediate authentication failure rather than as an obvious configuration error.
+
+**An empty value swallows the next keyword.** Whitespace after `=` is skipped before the value is read, so an unset variable does not yield an empty field — it consumes the following key text. With `DBHost` empty, `host= port=5432 …` parses the host as the literal string `port=5432`:
+
+```text
+could not translate host name "port=5432" to address: Name or service not known
+```
+
+A DNS-resolution error naming another key is the signature of an unset `DB_*` variable upstream, not of a network problem.
+
+**URI form as a safer alternative.** The same driver accepts a `postgres://` URI, where percent-encoding is the single uniform escaping mechanism and no character is whitespace-delimited. This matches the `DATABASE_URL` shape the composition root already passes. `Source: backend/cmd/server/main.go:L31`. Unlike the keyword/value form, the URI form rejects raw spaces explicitly rather than mis-parsing them:
+
+```text
+unexpected spaces found in "Space Pass#1", use percent-encoded spaces (%20) instead
+```
+
+Encode reserved characters in the userinfo segment — space `%20`, `#` `%23`, `'` `%27`, `\` `%5C`, `@` `%40`, `:` `%3A`, `/` `%2F`, `?` `%3F`, and `%` itself `%25`:
+
+```text
+postgres://spaceuser:Space%20Pass%231@localhost:5432/postgres?sslmode=disable
+```
+
+**Character handling summary.** The two forms disagree on which characters need attention, which is the main reason to prefer one form consistently:
+
+| Character in password | Keyword/value form | URI form |
+|-----------------------|--------------------|----------|
+| space | quote the value or escape as `\ ` — otherwise a parse error | must be `%20` — raw space is rejected with a clear message |
+| `\` | must be doubled (`\\`) — otherwise **silent** credential corruption | literal, or `%5C` |
+| `'` | must be escaped (`\'`) | literal, or `%27` |
+| `#` | literal — no handling required | literal, or `%23` |
+| `@`, `:`, `/`, `?` | literal — no handling required | percent-encode (they delimit URI components) |
+| `%` | literal — no handling required | **must** be `%25` — a bare `%` is a hard parse error |
+| empty / unset | consumes the next keyword as its value | yields an empty component |
+
+A password of `a@b:c/d?e%f` illustrates the asymmetry: it connects **unmodified** in the keyword/value form, both bare and quoted, because none of those characters is whitespace- or escape-significant there. In the URI form the same password must be written `a%40b%3Ac%2Fd%3Fe%25f`; leaving the `%` raw fails before any network round trip:
+
+```text
+invalid percent-encoded token: "a%40b%3Ac%2Fd%3Fe%f"
+```
+
+This is the one respect in which the keyword/value form is the more forgiving of the two, and it is why the choice of form should be made once per environment rather than per credential.
+
+**Operator guidance for this codebase (documented defect, not a code change).** Because L15 applies no quoting, the escaping above must be present in the *stored value* of `DB_PASSWORD` for the concatenated DSN to parse — which makes the stored secret differ from the real password and is error-prone. Until the DSN build quotes its inputs, the reliable options are to restrict database passwords to unreserved characters (letters, digits, `-`, `_`, `.`, `~`), or to supply a fully percent-encoded `DATABASE_URL` and connect through that instead of the five discrete fields. Quoting the interpolated values at L15 is the correct **Designed** correction; it is recorded here as a defect rather than applied, consistent with this documentation set's scope. The related config-shape inconsistency between `DatabaseURL` and the discrete `DB*` fields is described in the note above, and the full defect inventory is in [scaffold-vs-design.md](../architecture/scaffold-vs-design.md).
+
+**How these behaviors were verified.** The backend does not compile (absent `internal/config`, no `go.mod`), so none of the above could be observed through this codebase. Each behavior was instead reproduced against **PostgreSQL 15** with `scram-sha-256` authentication in force, using the reference libpq client, with a deliberately wrong-password control run confirming that the server was genuinely authenticating rather than trusting the connection. `lib/pq` — the driver this DSN is built for, `Source: backend/internal/db/postgres.go:L5` — implements the same keyword/value grammar, including single-quoted values and backslash escapes. Treat the DSN-parsing rules as **verified against the reference implementation** and the codebase's own behavior as **Source-present (non-buildable)**.
+
 ## Redis Configuration
 
 Redis is used as the cache and async status store. The client is created with the `go-redis/v8` driver. `Source: backend/internal/db/redis.go:L5`. Its options are read from a nested `Redis` struct on the config. `Source: backend/internal/db/redis.go:L14-L18`.

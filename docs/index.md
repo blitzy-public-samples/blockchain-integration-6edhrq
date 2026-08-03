@@ -18,7 +18,7 @@ The **authoritative, full vocabulary** — including the composite qualifiers *I
 
 ## Documentation Map
 
-The tree is organized into eight sections plus a leadership-facing executive summary, as shown in **Figure IX1**. Start from your audience row in the [Audiences](#audiences) table below, then use the [Navigation](#navigation) section for the full page list.
+The tree is organized into seven sections plus a leadership-facing executive summary, as shown in **Figure IX1**. Start from your audience row in the [Audiences](#audiences) table below, then use the [Navigation](#navigation) section for the full page list. The role-based onboarding curriculum lives on this page rather than in a section of its own — see [Role-Based Onboarding and Training Paths](#role-based-onboarding-and-training-paths).
 
 **Figure IX1 — Documentation Map (sections of the `docs/` tree and their entry points)**
 
@@ -34,20 +34,21 @@ flowchart TD
     Index --> ARCH["Architecture"]
     Index --> API["API Reference"]
     Index --> GUIDE["Guides"]
-    Index --> OPS["Operations (incl. System Administration)"]
+    Index --> OPS["Operations (incl. System Administration, Runbook)"]
     Index --> SEC["Security"]
-    Index --> TRAIN["Training"]
     Index --> CONTRIB["Contributing"]
+    Index --> TRAIN(["Role-Based Onboarding Paths (this page)"])
     Index --> DECK["Executive Summary (leadership)"]
 
     ARCH --> SVD(["Scaffold vs. Design"])
     API --> SVD
 
-    %% Legend: rectangles are sections; the stadium node is the single
-    %% source of truth for maturity labels and the defect catalog.
+    %% Legend: rectangles are sections; stadium nodes are pages rather than
+    %% folders — Scaffold vs. Design is the single source of truth for maturity
+    %% labels and the defect catalog, and the onboarding paths live on this page.
 ```
 
-As **Figure IX1** shows, both the Architecture and API Reference sections point at the *Scaffold vs. Design* reconciliation as the single source of truth for maturity and defects.
+As **Figure IX1** shows, both the Architecture and API Reference sections point at the *Scaffold vs. Design* reconciliation as the single source of truth for maturity and defects, and the onboarding curriculum is a section of this page rather than a folder of its own.
 
 ## Audiences
 
@@ -56,20 +57,83 @@ Pick your starting point by role. Every path below resolves within this tree exc
 | Audience | Start here |
 |----------|------------|
 | New developers | [Installation](getting-started/installation.md), then [Local Development](getting-started/local-development.md) |
-| New team members / trainees | [Training Materials](training/training-materials.md) — the role-based onboarding course |
+| New team members / trainees | [Role-Based Onboarding and Training Paths](#role-based-onboarding-and-training-paths) — the reading order for each role |
 | Backend / API engineers | [Backend Architecture](architecture/backend.md) and [API Reference — Overview](api-reference/overview.md) |
 | Frontend engineers | [Frontend Architecture](architecture/frontend.md) |
 | Operators / SRE | [Observability](operations/observability.md) and [Operations Runbook](operations/runbook.md) |
-| System administrators / DevOps | [System Administration Guide](operations/system-administration.md) |
+| System administrators / DevOps | [System administration entry point](operations/runbook.md#system-administration-entry-point) in the Operations Runbook |
 | Security reviewers | [Security Model](security/security-model.md) |
 | Contributors | [Development Workflow](contributing/development.md) and [Testing Strategy](contributing/testing.md) |
 | Non-technical leadership / executives | [Executive Summary](../blitzy-deck/executive-summary.html) (self-contained presentation) |
+
+## Role-Based Onboarding and Training Paths
+
+This section is the written onboarding and training curriculum for the documentation set — the artifact the Software Project Proposal lists as *written guides for common operations* under its Training-Materials deliverable. `Source: documentation/Software Project Proposal.md:L419-L421` It prescribes a reading order per role over the authoritative pages in this tree rather than restating their content, so a trainee always lands on the page that owns each topic. The deliverable's companion *video tutorials* item remains **Designed** — no video artifact is produced by this documentation-only work. `Source: documentation/Software Project Proposal.md:L419-L421`
+
+Two categories of training are distinguished so no trainee is misled:
+
+- **Conceptual and documentation training — usable today.** Understanding the domain (vaults, signatures, transactions), the architecture, the maturity vocabulary, the API surface, the security model, and how to navigate this tree. Every step below is exercisable now against the repository and its documentation.
+- **Hands-on operational walkthroughs — Designed.** Any instruction to act in the *running* application (log in, create a vault, submit a transaction, watch the dashboard update) describes the **intended** system. The application does not build or run from this repository as-is, so those walkthroughs become executable only after the defects catalogued in [`architecture/scaffold-vs-design.md`](architecture/scaffold-vs-design.md#defect-catalog) are resolved. Each feature guide states this explicitly in its own status section.
+
+The five roles are the **Designed** RBAC roles defined in [`security/security-model.md`](security/security-model.md); each maps to a value of `User.Role`, which is a plain unconstrained string in code today. `Source: backend/internal/db/schema.go:L27` **Figure IX2** shows the recommended path for each role.
+
+**Figure IX2 — Role-Based Onboarding Paths (recommended reading order per role)**
+
+```mermaid
+flowchart TD
+    subgraph Legend_IX2["Legend"]
+        LG1["Rectangle = onboarding stage"]
+        LG2(["Stadium = authoritative page in this tree"])
+        LG3["Solid arrow = recommended order"]
+    end
+
+    START["New team member"] --> FND["Stage 1: Foundations — maturity vocabulary and navigation"]
+    FND --> DOMAIN["Stage 2: Domain and architecture"]
+
+    DOMAIN --> ADMINP["Admin / Manager path"]
+    DOMAIN --> OPP["Operator path"]
+    DOMAIN --> AUDP["Auditor path"]
+    DOMAIN --> APIP["API User path"]
+
+    FND --> SVD(["architecture/scaffold-vs-design.md"])
+    DOMAIN --> AOV(["architecture/overview.md"])
+    DOMAIN --> DM(["architecture/data-model.md"])
+
+    ADMINP --> SYSADMIN(["operations/runbook.md — system administration"])
+    ADMINP --> AUTH(["api-reference/authentication.md — UA-001"])
+    OPP --> VG(["guides/vault-management.md — VM-001"])
+    OPP --> TG(["guides/transaction-processing.md — TP-001"])
+    OPP --> SG(["guides/signature-management.md — SG-001"])
+    OPP --> OBS(["operations/observability.md — MA-001"])
+    AUDP --> OBS
+    AUDP --> SEC(["security/security-model.md"])
+    APIP --> API(["api-reference/overview.md"])
+
+    %% Legend: rectangles are onboarding stages; stadium nodes are the
+    %% authoritative pages each stage reads.
+```
+
+As **Figure IX2** shows, every role begins with the same two stages — Foundations and Domain and Architecture — before branching into role-specific pages; the stadium nodes are the pages that own each topic.
+
+- **Stage 1 — Foundations (usable today).** Learn what the platform is: a custodial blockchain integration platform whose domain is vaults, signatures, and transactions, with a Go/Gin backend over 18 REST endpoints and a React 18 dashboard. `Source: backend/internal/api/routes.go:L9-L54` Learn the maturity vocabulary — *Implemented*, *Source-present (non-buildable)*, *Provisioned*, *Designed* — from the authoritative [Maturity Legend](architecture/scaffold-vs-design.md#maturity-legend), and learn that every claim carries a `Source:` citation. **Exercise:** open [`architecture/scaffold-vs-design.md`](architecture/scaffold-vs-design.md) and locate three capabilities, one at each maturity level.
+- **Stage 2 — Domain and architecture (usable today).** Read the before/after architecture pair **Fig A1**/**Fig A2** in [`architecture/overview.md`](architecture/overview.md), then the five entities and **Fig M1** in [`architecture/data-model.md`](architecture/data-model.md). **Exercise:** trace one entity from its Go struct citation through to the endpoint that operates on it in [`api-reference/overview.md`](api-reference/overview.md).
+- **Role branches.** Read the pages listed for your role in the table below, in order. Each feature guide contains its own setup, usage, and troubleshooting sections, and states which of its steps are **Designed**.
+
+| Role | Reading order after Stages 1–2 |
+|------|--------------------------------|
+| Admin | [System administration](operations/runbook.md#system-administration-entry-point) → [UA-001 authentication guide](api-reference/authentication.md#user-authentication--authorization-guide-ua-001) → [Observability / MA-001](operations/observability.md) → [Security model](security/security-model.md) |
+| Manager | [UA-001 authentication guide](api-reference/authentication.md#user-authentication--authorization-guide-ua-001) → [VM-001](guides/vault-management.md) → [TP-001](guides/transaction-processing.md) → [SG-001](guides/signature-management.md) → [Observability / MA-001](operations/observability.md) |
+| Operator | [VM-001](guides/vault-management.md) → [TP-001](guides/transaction-processing.md) → [SG-001](guides/signature-management.md) → [Observability / MA-001](operations/observability.md) → [Runbook FM-1 … FM-5](operations/runbook.md) |
+| Auditor | [Observability / MA-001](operations/observability.md) → [Security model](security/security-model.md) → [Scaffold vs. Design](architecture/scaffold-vs-design.md) |
+| API User | [UA-001 authentication guide](api-reference/authentication.md#user-authentication--authorization-guide-ua-001) → [API Reference — Overview](api-reference/overview.md) → [`api-reference/openapi.yaml`](api-reference/openapi.yaml) |
+
+Contributors joining the codebase itself should follow [`contributing/development.md`](contributing/development.md) and [`contributing/testing.md`](contributing/testing.md) after Stage 2; non-technical leadership should read the [Executive Summary](../blitzy-deck/executive-summary.html) instead of this curriculum.
 
 ## Navigation
 
 Every link below points to a page produced as part of this documentation set. All paths are relative to this file (`docs/index.md`).
 
-Two pages — [`operations/system-administration.md`](operations/system-administration.md) and [`training/training-materials.md`](training/training-materials.md) — fulfill Software Project Proposal deliverables (items 6 and 10) that the Agent Action Plan restates as binding (AAP §0.1.1, §0.11.2) but does not enumerate as rows in its §0.5.1 file-transformation map, so a plan-versus-delivered path diff reports them as extras. Each page records that provenance in its own opening section; the entries below name it inline so the delta is self-explaining. `Source: documentation/Software Project Proposal.md:L401-L402` `Source: documentation/Software Project Proposal.md:L419-L421`
+The two Software Project Proposal deliverables that have no page of their own — the *system administration guide* (item 6) and the *written guides for common operations* (item 10) — are delivered inside pages that do: system administration is the [system administration entry point](operations/runbook.md#system-administration-entry-point) in the Operations Runbook, and the training curriculum is [Role-Based Onboarding and Training Paths](#role-based-onboarding-and-training-paths) above. `Source: documentation/Software Project Proposal.md:L401-L402`, `Source: documentation/Software Project Proposal.md:L419-L421`
 
 ### Getting Started
 
@@ -107,22 +171,17 @@ The backend exposes **18 REST endpoints** with no `/api/v1` prefix and a singula
 ### Operations
 
 - [`operations/observability.md`](operations/observability.md) — Structured logging with correlation IDs, distributed tracing, a `/metrics` endpoint, and health/readiness checks, stating precisely what is **reused** (Gin access logging and worker structured logging — both **emission-only** and **source-present (non-buildable)**, so they do not run today) versus **added** (**Designed** correlation IDs, tracing, metrics, health endpoints).
-- [`operations/system-administration.md`](operations/system-administration.md) — The consolidated system-administration guide: configuration, deployment, database and cache administration, backup and recovery, monitoring, user and role administration, security administration, and incident response. Fulfills Software Project Proposal DELIVERABLES item 6 ("User Manuals" → *System administration guide*); not a row in the AAP §0.5.1 map. `Source: documentation/Software Project Proposal.md:L401-L402`
-- [`operations/runbook.md`](operations/runbook.md) — Alerts and failure modes, including the startup ticker panic and settlement-retry behavior.
+- [`operations/runbook.md`](operations/runbook.md) — Alerts and failure modes (FM-1 … FM-5), including the startup ticker panic and settlement-retry behavior, plus the consolidated [system administration entry point](operations/runbook.md#system-administration-entry-point) covering configuration, deployment, database and cache administration, backup and recovery, monitoring, user and role administration, security administration, and incident response. Delivers Software Project Proposal DELIVERABLES item 6 ("User Manuals" → *System administration guide*). `Source: documentation/Software Project Proposal.md:L401-L402`
 - [`operations/dashboard-template.json`](operations/dashboard-template.json) — The observability dashboard template (metric, log, and health panels).
 
 ### Security
 
 - [`security/security-model.md`](security/security-model.md) — Role-based access control (Admin/Manager/Operator/Auditor/API User), JWT with refresh tokens, multi-factor authentication, and encryption. It also carries the [documentation toolchain supply chain and advisory posture](security/security-model.md#documentation-toolchain-supply-chain-and-advisory-posture) — the dependency inventory for this documentation set and the executive deck, with every open CVE/GHSA against the pinned CDN chain enumerated, reachability-assessed, and maturity-labeled.
 
-### Training
-
-- [`training/training-materials.md`](training/training-materials.md) — The role-based onboarding and training course, delivering the proposal's written guides for common operations (with operator/dashboard depth) and labeling the video tutorials as **Designed**. Fulfills Software Project Proposal DELIVERABLES item 10 ("Training Materials"); not a row in the AAP §0.5.1 map. `Source: documentation/Software Project Proposal.md:L419-L421`
-
 ### Contributing
 
 - [`contributing/development.md`](contributing/development.md) — Contribution workflow and CI overview.
-- [`contributing/testing.md`](contributing/testing.md) — Test strategy and coverage targets.
+- [`contributing/testing.md`](contributing/testing.md) — Test strategy and coverage targets, plus the durable [documentation quality-assurance gate ledger](contributing/testing.md#documentation-quality-assurance-gate-ledger) recording every review gate this deliverable has passed and the [evidence integrity rules](contributing/testing.md#evidence-integrity-rules) that govern it.
 
 ## Project & Governance Links
 
