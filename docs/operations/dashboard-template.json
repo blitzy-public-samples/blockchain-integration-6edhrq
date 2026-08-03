@@ -1,0 +1,446 @@
+{
+  "__doc__": "Observability dashboard TEMPLATE for the Blockchain Integration Service and Dashboard. Grafana-compatible dashboard model (schemaVersion 39). MATURITY: this template is DESIGNED. Panels marked 'Designed' depend on capabilities that are absent today (correlation-ID middleware, OpenTelemetry tracing, /metrics, /health, /ready). Panels bound to source-present call sites (the tasks logger.Error worker logs) are labeled 'Source-present (non-buildable)': those call sites exist in the repository but depend on the ABSENT pkg/logger package (Source: backend/cmd/server/main.go:L10) and the backend does not compile, so NO panel binds to a signal that is emitted today. All other panels are 'Designed' (their capability is absent). See docs/operations/observability.md (Fig O1) and docs/operations/runbook.md. Grounded in documentation/Technical Specifications.md (THIRD-PARTY SERVICES: Amazon CloudWatch) and AAP Observability rule (0.10.3). DATASOURCE PREREQUISITES: the 8 data panels bind indirectly through two dashboard variables of type 'datasource' - datasource_metrics (query: prometheus, 7 panels) and datasource_logs (query: loki, 1 panel). On a Grafana instance with no Prometheus/Loki datasource both variables resolve to an EMPTY string, every data panel enters an ERROR state whose header tooltip reads 'Datasource was not found', and Grafana issues NO query at all - which is a Grafana setup gap, NOT a signal about the application. Because the panel body reads 'No data' in that error state AND in the healthy-but-empty state, body text alone cannot distinguish them; panel 12 ('Read me first') documents the discriminating signals and renders without any datasource.",
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "11.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "loki",
+      "name": "Loki",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "logs",
+      "name": "Logs",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "text",
+      "name": "Text",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "row",
+      "name": "Row",
+      "version": ""
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "name": "Deployments",
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "blockchain-integration",
+    "observability",
+    "template"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource_metrics",
+        "label": "Metrics datasource (Prometheus)",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "datasource_logs",
+        "label": "Logs datasource (Loki/CloudWatch)",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Blockchain Integration Service - Observability (Template)",
+  "uid": "blockchain-integration-observability",
+  "version": 1,
+  "panels": [
+    {
+      "id": 12,
+      "type": "text",
+      "title": "Read me first — datasource prerequisites (Designed template)",
+      "description": "Maturity: documentation. This panel is deliberately datasource-free so that it renders even when no datasource has been configured, i.e. in the exact state where every other panel is unable to explain itself.",
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "## Read me first — datasource prerequisites\n\nThis dashboard is a **DESIGNED template**. It ships as documentation, not as a live dashboard. Before any panel can plot anything you must supply **two datasources** and select them in the pickers at the top of this dashboard:\n\n| Variable picker | Required datasource type | Panels bound to it |\n|---|---|---|\n| `Metrics datasource (Prometheus)` | **Prometheus** | 7 |\n| `Logs datasource (Loki/CloudWatch)` | **Loki** | 1 |\n\n### Tell the three states apart\n\nEvery data panel reads `No data` in **all three** states, so the body text alone tells you nothing. Use these signals instead:\n\n1. **Datasource not resolved** — a picker above is **blank** (its label carries a red warning triangle reading `No data sources found`) and every panel header shows a **red warning-triangle badge** whose tooltip reads `Datasource was not found`. Grafana issues **no query at all**. *This is a Grafana setup gap, not a signal about the application.*\n2. **Query valid, result empty** — pickers show your datasource names, **no** header badges, and Grafana does issue queries which return `200` with zero series. *This is the expected state for this template.*\n3. **Application emits no telemetry** — the reason state 2 is empty here: the backend exposes no `/metrics`, `/health` or `/ready` route, and does not compile, so nothing has ever written these series.\n\n> **Caution:** the three `stat` panels render `No data` as **large green text**. That is the stat panel's base threshold colour, **not** a healthy reading.\n\nFull explanation: `docs/operations/observability.md` (Pillar 5). Every panel's own maturity label and citation is in its description (hover the **i** icon in the panel header)."
+      },
+      "transparent": false
+    },
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Service Health (Designed)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Liveness /health (Designed)",
+      "description": "Maturity: Designed. Binds to a /health endpoint that does not exist yet (Source: backend/internal/api/routes.go:L9-L54 defines no health route). Also needs a Dockerfile HEALTHCHECK (Source: infrastructure/docker/Dockerfile.backend:L20 - absent). CAVEAT: the query up{job=\"blockchain-backend\"} is Prometheus SCRAPE REACHABILITY of the metrics target (whether Prometheus could reach an exporter), NOT the result of the application /health endpoint; at best it is a coarse process-liveness proxy. Today it resolves to no data because there is no /metrics target to scrape (no exporter exists) and no /health route to assert (Designed). A faithful liveness panel is Designed and requires the absent /health endpoint plus a scrapable target; the endpoint and HEALTHCHECK gap it depends on is failure mode FM-5 in runbook.md.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_metrics}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 15
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                }
+              }
+            }
+          ],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"blockchain-backend\"}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Readiness /ready - PostgreSQL + Redis (Designed)",
+      "description": "Maturity: Designed. A /ready check should assert PostgreSQL and cache reachability, but no /ready route exists (Source: backend/internal/api/routes.go:L9-L54) and the metric blockchain_ready is emitted by nothing today - there is no /metrics endpoint or exporter anywhere in the backend (Source: backend/internal/api/routes.go:L9-L54) - so this panel resolves to no data. The liveness primitives it would compose are Source-present (non-buildable) and DO NOT EXECUTE today: db.Ping (Source: backend/internal/db/postgres.go:L27) and redisClient.Ping (Source: backend/internal/db/redis.go:L21) sit inside the connection initializers rather than an HTTP probe, and the db package does not compile because it imports the absent internal/config (Source: backend/internal/db/postgres.go:L7). They are therefore the building blocks a Designed /ready endpoint would call once the module builds, not a signal this panel can read. CAVEAT: readiness alone does not drain traffic - without graceful shutdown on SIGTERM a running-but-terminating task keeps receiving requests; see runbook.md FM-5.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_metrics}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 15
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "READY",
+                  "color": "green"
+                },
+                "0": {
+                  "text": "NOT READY",
+                  "color": "red"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "blockchain_ready{component=~\"postgres|redis\"}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "row",
+      "title": "API Traffic (Designed - requires /metrics)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "collapsed": false
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "HTTP Request Rate by route (Designed)",
+      "description": "Maturity: Designed. Requires a /metrics endpoint exporting Gin request counters; no /metrics route exists today (Source: backend/internal/api/routes.go:L9-L54), and the api package does not compile in any case, so http_requests_total is emitted by nothing and this panel resolves to no data. The 18 routes are grouped under /auth, /vault, /transactions, /signatures (Source: backend/internal/api/routes.go:L17-L52).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_metrics}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (route) (rate(http_requests_total[5m]))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "HTTP p95 Latency (Designed)",
+      "description": "Maturity: Designed. Requires /metrics request-duration histograms, which are absent: no /metrics route or exporter exists (Source: backend/internal/api/routes.go:L9-L54), so http_request_duration_seconds_bucket is emitted by nothing and this panel resolves to no data. Target capacity per design is 10,000 req/s (Source: documentation/Technical Specifications.md:SYSTEM OVERVIEW).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_metrics}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{route}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "row",
+      "title": "Background Workers (Source-present call sites, non-buildable / Designed metrics)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "collapsed": false
+    },
+    {
+      "id": 8,
+      "type": "logs",
+      "title": "Worker Errors - transaction + signature processors (Source-present, non-buildable)",
+      "description": "Maturity: Source-present (non-buildable). Binds to the logger.Error call sites on the processors' error paths (Source: backend/internal/tasks/transaction_processor.go:L26,L44,L50,L57; backend/internal/tasks/signature_processor.go:L25,L42,L48,L53,L57). These call the ABSENT pkg/logger package (Source: backend/cmd/server/main.go:L10) and the backend does not compile, so no log line is emitted today; log format and destination are therefore unverified and there is no aggregation. Nothing populates this panel and it resolves to no data at this checkpoint. LOGFMT ASSUMPTION (Designed): the parser | logfmt assumes each line is logfmt-encoded key=value pairs; because pkg/logger is absent the actual on-the-wire encoding is unverified, so the logfmt parse is a Designed assumption to confirm once a structured logger ships. REDACTION CONTRACT (Designed): this panel must project ONLY a sanitized allowlist - level, msg, error class/category, and non-secret identifiers such as txID, signatureID, route, and status - and must NEVER surface Authorization headers, cookies, JWTs, passwords, API keys, raw signatures, or full request/response bodies. The worker call sites log the full err value (Source: backend/internal/tasks/signature_processor.go:L42), which can carry sensitive detail, and no redaction runs today; redaction is therefore Designed and must be enforced both in the logger and by a query that selects the allowlisted fields (for example, replace a raw dump with a count such as sum(count_over_time({job=\"blockchain-backend\"} | logfmt | level=\"error\" [5m])) by (msg)) rather than rendering raw messages. The error paths this panel would surface are the detection signals for failure modes FM-2 (settlement retry with no backoff) and FM-3 (signature poll stalled) in runbook.md. See docs/operations/observability.md (Logging allowlist and redaction contract).",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource_logs}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 29
+      },
+      "options": {
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"blockchain-backend\"} |= \"level=error\" | logfmt"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Settlement Lag - pending transaction age (Designed)",
+      "description": "Maturity: Designed. Approximates the time transactions remain in status Pending before the transaction processor moves them to Processed (Source: backend/internal/core/transaction/service.go:L46,L81). The metric blockchain_transaction_pending_age_seconds is emitted by nothing today - no /metrics endpoint or exporter exists (Source: backend/internal/api/routes.go:L9-L54) - so this panel resolves to no data. CAUSAL ORDER (matches runbook.md FM-4 then FM-1): the backend module does not compile - there is no go.mod and the worker imports the absent pkg/logger (Source: backend/internal/tasks/transaction_processor.go:L10) - so the processor does not run today and the build fails first; once it builds it would additionally hit a LATENT uninitialized-ticker panic, because transactionCheckInterval is never assigned and time.NewTicker(0) panics (Source: backend/internal/tasks/transaction_processor.go:L13-L16). THRESHOLD RATIONALE (Designed placeholder): the red step is 300 seconds because no settlement cadence can be derived from the transaction processor - transactionCheckInterval is uninitialized - so the template borrows the only committed worker cadence in the repository, the signature processor's const signatureCheckInterval = 5 * time.Minute, i.e. 300 s (Source: backend/internal/tasks/signature_processor.go:L13). Re-derive it from the real settlement cadence once that interval is initialized. The retry behaviour behind a rising lag - the loop logs the error and retries on the next tick with no backoff and no dead-letter path - is failure mode FM-2 in runbook.md.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_metrics}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(blockchain_transaction_pending_age_seconds)"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Signature Processor Poll Interval (source-present const = 5m)",
+      "description": "Maturity: mixed. The 5-minute value is a Source-present (non-buildable) constant (Source: backend/internal/tasks/signature_processor.go:L13 const signatureCheckInterval = 5 * time.Minute), but the panel's query metric blockchain_signature_poll_interval_seconds is DESIGNED: no /metrics endpoint or exporter emits it today (no prometheus/otel import exists anywhere in the backend - Source: backend/internal/api/routes.go:L9-L54), so the panel resolves to no data. The tasks package also does not compile so no poll runs today. Shown for reference; a Designed last-successful-poll metric (see runbook.md FM-3) is required to confirm liveness.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_metrics}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 37
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "blockchain_signature_poll_interval_seconds"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Distributed Trace Error Rate (Designed)",
+      "description": "Maturity: Designed. Requires OpenTelemetry tracing across service boundaries; no tracing exists today - the router registers only gin.Logger/gin.Recovery and no otel middleware (Source: backend/internal/api/routes.go:L9-L54), and no otel/opentelemetry import exists anywhere in the backend (Source: backend/cmd/server/main.go:L3-L13), so traces_spanmetrics_calls_total is emitted by nothing and this panel resolves to no data. Would surface cross-service error spans (handler -> core service -> custodian/blockchain adapters), two of which are themselves absent packages (Source: backend/cmd/server/main.go:L8-L9). See Fig O1 in observability.md.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_metrics}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 18,
+        "x": 6,
+        "y": 37
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(traces_spanmetrics_calls_total{status_code=\"STATUS_CODE_ERROR\"}[5m])) / sum(rate(traces_spanmetrics_calls_total[5m]))"
+        }
+      ]
+    }
+  ]
+}

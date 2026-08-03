@@ -1,0 +1,1514 @@
+openapi: 3.0.3
+info:
+  title: Blockchain Integration Service API
+  version: 0.1.0
+  description: |
+    Machine-readable OpenAPI 3.0 specification for the Blockchain Integration
+    Service backend HTTP contract. **Route and HTTP-method parity is
+    source-derived**: every path and method below is taken directly from the
+    router, which registers all 18 REST endpoints across the Authentication,
+    Vaults, Transactions, and Signatures resources, and no route or method is
+    invented beyond those 18. **Request and response bodies are Designed/inferred,
+    not a verified executable contract**: the handler package does not compile,
+    most handlers carry no readable body-binding code, and the Go entity structs
+    have no `json` tags, so the schemas below are the *intended* shapes rather
+    than a byte-for-byte contract observed at runtime.
+    Source: backend/internal/api/routes.go:L9-L54.
+
+    Maturity discipline (per operation): every operation is annotated in its
+    `description` as **Source-present (non-buildable)** (the handler method is
+    written in source, but the containing package does not compile, so no runtime
+    behavior may be asserted) or **Designed** (the route is registered by the
+    router, but its handler method is not defined in the readable handler source
+    or is a name-mismatched placeholder). Per the single operational-truth
+    vocabulary in docs/architecture/scaffold-vs-design.md, the label
+    **Implemented** (present, building, and functional) is **reserved** and
+    **nothing in this repository qualifies for it** at this checkpoint: the
+    backend has no `go.mod` and every package carries compile-blocking defects,
+    so no operation below is Implemented. No operation is invented beyond the 18
+    registered routes.
+
+    Response serialization (applies to every entity schema in `components`): the
+    lower-camelCase property names in the Organization, User, Vault, Transaction,
+    and Signature schemas are the **Designed** response DTO. The Go structs carry
+    **no `json` tags** and embed `gorm.Model`; were the code to compile and
+    marshal them as-declared, the actual JSON keys would be **PascalCase** (for
+    example `ID`, `OrganizationID`, `UserID`, `VaultID`, `Status`,
+    `BlockchainType`, `TxHash`, `RawSignature`, `Amount`, `Metadata`,
+    `CreatedAt`, `UpdatedAt`) plus a promoted `DeletedAt`. See
+    docs/api-reference/overview.md (Response Serialization).
+    Source: backend/internal/db/schema.go:L11-L68.
+
+    **Blockchain address examples — test values only, never send funds.** Every
+    XRP Ledger address in this specification is an unmistakable placeholder
+    (`<xrp-vault-address>`, `<xrp-destination-address>`) that is **not** a valid,
+    sendable account. Placeholders are illustrative only: do not copy them into a
+    live request, and never transmit real funds or mainnet transactions to any
+    address taken from this document. When exercising the API against a running
+    environment, substitute an account you control on a **test network only**
+    (for example the XRPL Testnet); treat any example value as non-spendable.
+
+    Path fidelity and known divergences (documented here, never silently
+    reconciled — the paths below are the ACTUAL code paths):
+      - The router registers routes at the root with **no `/api/v1` prefix** and
+        uses the **singular** `/vault` group.
+        Source: backend/internal/api/routes.go:L9-L54.
+      - The frontend Axios client calls **plural** resource paths — `/vaults`,
+        `/transactions`, and `/signatures/{id}` — which disagree with the
+        backend's singular `/vault` and action-style routes.
+        Source: frontend/src/services/api.ts:L34,L40,L46.
+      - The design corpus documents `/api/v1/...` prefixed, plural paths (for
+        example `/api/v1/vaults`) as the **Designed** target.
+        Source: documentation/Technical Specifications.md:§API DESIGN.
+
+    Transaction status vocabulary divergence: the backend uses `Pending` /
+    `Processed`, while the frontend Zod schema validates
+    `Pending` / `Completed` / `Failed`. See the Transaction schema.
+    Source: backend/internal/core/transaction/service.go:L46,L81,
+    Source: frontend/src/schema/transaction.ts:L10.
+
+    Entity field and relationship definitions are maintained canonically in
+    docs/architecture/data-model.md (Fig M1 — Data Model ERD) and are derived
+    from backend/internal/db/schema.go:L11-L68.
+
+    This document fulfils the project's committed "Swagger docs for all
+    endpoints" deliverable and its 100%-endpoint-coverage documentation metric.
+    Source: documentation/Software Project Proposal.md:L135,L388,
+    Source: documentation/Software Project Proposal.md:L82.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: http://localhost:8080
+    description: |
+      Local development base URL — **illustrative only** (no version prefix;
+      paths are served at the router root). No `/api/v1` base path exists in
+      code. `main.go` calls `router.Run(cfg.ServerAddress)`, but `cfg` is
+      produced by the **absent** `internal/config` package, so there is no
+      compiled default bind address and the value cannot be resolved today;
+      `http://localhost:8080` is a documentation convention. The frontend Axios
+      client instead defaults its base URL to `https://api.example.com`
+      (overridable via `REACT_APP_API_BASE_URL`).
+      Source: backend/cmd/server/main.go:L6,L59-L60,
+      Source: frontend/src/services/api.ts:L4.
+tags:
+  - name: Authentication
+    description: |
+      User login, registration, and logout.
+      Source: backend/internal/api/routes.go:L17-L22.
+  - name: Vaults
+    description: |
+      Custodial vault management, scoped by organization.
+      Source: backend/internal/api/routes.go:L25-L31.
+  - name: Transactions
+    description: |
+      Blockchain transaction command and query operations.
+      Source: backend/internal/api/routes.go:L35-L41.
+  - name: Signatures
+    description: |
+      Custodial signature request and status operations.
+      Source: backend/internal/api/routes.go:L45-L51.
+security:
+  - bearerAuth: []
+paths:
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      operationId: loginUser
+      summary: Authenticate a user and obtain a JWT
+      description: |
+        Authenticates a user with `username` and `password` and returns a signed
+        JWT used as the bearer token for all secured endpoints. Public — no
+        authentication required. **Source-present (non-buildable)** — the handler
+        is written in source, but the `api` package imports the absent
+        `middleware` package and the backend has no `go.mod`, so this operation
+        does not run today.
+        Source: backend/internal/api/handlers/auth.go:L21-L39.
+
+        Scope of "Public": no middleware is attached to this route in the router,
+        which is accurate for the engine `SetupRouter()` registers the 18 routes
+        on. The composition root separately applies `middleware.AuthMiddleware()`
+        engine-wide with no exemption for login or registration - but on its own
+        engine, which carries no routes because the routed engine that
+        `SetupRouter()` returns is discarded at the call site. This
+        specification documents the router's contract; the two-engine wiring
+        defect is catalogued as Defect 1.
+        Source: backend/internal/api/routes.go:L17-L22;
+        backend/cmd/server/main.go:L50-L52,L60,L76.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              username: alice
+              password: 'S3cret-Passphrase!'
+      responses:
+        '200':
+          description: Authentication succeeded; a JWT is returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.PLACEHOLDER_CLAIMS.PLACEHOLDER_SIGNATURE
+        '400':
+          description: Invalid request payload (missing or malformed credentials).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid request payload
+        '401':
+          description: Invalid credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid credentials
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      operationId: registerUser
+      summary: Register a new user
+      description: |
+        Registers a new user. The route is registered by the router, but no
+        `Register` handler method is defined in the readable handler source, so
+        this operation is **Designed** (target behavior; request/response shapes
+        are inferred). Public — no authentication required, in the same
+        router-scoped sense as `POST /auth/login`: no middleware is attached to
+        this route, while the composition root's engine-wide
+        `middleware.AuthMiddleware()` registration applies to a separate engine
+        that carries no routes (Defect 1).
+        Source: backend/internal/api/routes.go:L20;
+        backend/cmd/server/main.go:L50-L52,L76.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              username: alice
+              email: alice@example.com
+              password: 'S3cret-Passphrase!'
+              organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
+      responses:
+        '201':
+          description: User registered successfully (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example:
+                id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
+                username: alice
+                email: alice@example.com
+                role: Operator
+                createdAt: '2024-01-15T09:30:00Z'
+                updatedAt: '2024-01-15T09:30:00Z'
+        '400':
+          description: Invalid request payload (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid request payload
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      operationId: logoutUser
+      summary: Log out the authenticated user
+      description: |
+        Invalidates the caller's session using the authenticated `userID`
+        resolved from the JWT. Secured — the router attaches `AuthMiddleware()`
+        to this route within the auth group, so it inherits the global
+        `bearerAuth` requirement. **Source-present (non-buildable)** — the handler
+        is written in source, but the `api` package imports the absent
+        `middleware` package and the backend has no `go.mod`, so this operation
+        does not run today.
+        Source: backend/internal/api/handlers/auth.go:L41-L55,
+        Source: backend/internal/api/routes.go:L21.
+      responses:
+        '200':
+          description: Logout succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Logged out successfully
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '500':
+          description: Failed to logout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Failed to logout
+  /vault/create:
+    post:
+      tags:
+        - Vaults
+      operationId: createVault
+      summary: Create a vault
+      description: |
+        Creates a custodial vault for the caller's organization and provisions an
+        on-chain address for the selected blockchain. **Source-present
+        (non-buildable)** — the handler is written in source, but the vault path
+        depends on the absent `internal/blockchain`, `internal/custodian`, and
+        `middleware` packages and the backend has no `go.mod`, so this operation
+        does not run today.
+        Source: backend/internal/api/handlers/vault.go:L37-L57.
+
+        Path note: the frontend client calls the plural `/vaults` path, which
+        diverges from this singular `/vault/create` route.
+        Source: frontend/src/services/api.ts:L34.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVaultRequest'
+            example:
+              name: Treasury Vault
+              blockchainType: XRP
+      responses:
+        '201':
+          description: Vault created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vault'
+              example:
+                id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
+                name: Treasury Vault
+                blockchainType: XRP
+                address: "<xrp-vault-address>"
+                metadata: {}
+                createdAt: '2024-01-15T09:30:00Z'
+                updatedAt: '2024-01-15T09:30:00Z'
+        '400':
+          description: Invalid request body or invalid organization ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid request body
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '500':
+          description: Failed to create vault.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Failed to create vault
+  /vault/list:
+    get:
+      tags:
+        - Vaults
+      operationId: listVaults
+      summary: List vaults for the caller's organization
+      description: |
+        Lists vaults scoped to the caller's organization. The router references a
+        `ListVaults` handler, but only `GetAllVaults` is defined in the handler
+        source (handler/route name mismatch), so this operation is **Designed**.
+        Source: backend/internal/api/routes.go:L28.
+
+        Path note: the frontend client calls the plural `/vaults` path.
+        Source: frontend/src/services/api.ts:L34.
+      responses:
+        '200':
+          description: A list of vaults (**Designed**).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Vault'
+              example:
+                - id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                  organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
+                  name: Treasury Vault
+                  blockchainType: XRP
+                  address: "<xrp-vault-address>"
+                  metadata: {}
+                  createdAt: '2024-01-15T09:30:00Z'
+                  updatedAt: '2024-01-15T09:30:00Z'
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+  /vault/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    get:
+      tags:
+        - Vaults
+      operationId: getVault
+      summary: Get a vault by ID
+      description: |
+        Retrieves a single vault by its UUID. The route is registered, but its
+        handler method is not defined in the readable handler source, so this
+        operation is **Designed**. Source: backend/internal/api/routes.go:L29.
+      responses:
+        '200':
+          description: The requested vault (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vault'
+              example:
+                id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
+                name: Treasury Vault
+                blockchainType: XRP
+                address: "<xrp-vault-address>"
+                metadata: {}
+                createdAt: '2024-01-15T09:30:00Z'
+                updatedAt: '2024-01-15T09:30:00Z'
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '404':
+          description: Vault not found (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Vault not found
+    put:
+      tags:
+        - Vaults
+      operationId: updateVault
+      summary: Update a vault
+      description: |
+        Updates a vault's mutable attributes. The route is registered, but its
+        handler method is not defined, so this operation is **Designed**.
+        Source: backend/internal/api/routes.go:L30.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateVaultRequest'
+            example:
+              name: Treasury Vault (renamed)
+              metadata:
+                tier: cold
+      responses:
+        '200':
+          description: The updated vault (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vault'
+              example:
+                id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
+                name: Treasury Vault (renamed)
+                blockchainType: XRP
+                address: "<xrp-vault-address>"
+                metadata:
+                  tier: cold
+                createdAt: '2024-01-15T09:30:00Z'
+                updatedAt: '2024-01-16T11:00:00Z'
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '404':
+          description: Vault not found (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Vault not found
+    delete:
+      tags:
+        - Vaults
+      operationId: deleteVault
+      summary: Delete a vault
+      description: |
+        Deletes a vault by its UUID. The route is registered, but its handler
+        method is not defined, so this operation is **Designed**.
+        Source: backend/internal/api/routes.go:L31.
+      responses:
+        '204':
+          description: Vault deleted; no content (**Designed**).
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '404':
+          description: Vault not found (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Vault not found
+
+  /transactions/create:
+    post:
+      tags:
+        - Transactions
+      operationId: createTransaction
+      summary: Create a transaction
+      description: |
+        Creates a blockchain transaction (the command path): builds a raw
+        transaction for the source vault and persists it with status `Pending`.
+        Settlement to `Processed` is performed asynchronously by the background
+        transaction processor. **Source-present (non-buildable)** — the handler is
+        written in source, but the transaction path depends on the absent
+        `internal/blockchain`, `internal/custodian`, and `middleware` packages and
+        the backend has no `go.mod`, so this operation does not run today; the
+        processor additionally has a latent `time.NewTicker(0)` panic from an
+        uninitialized interval.
+        Source: backend/internal/api/handlers/transaction.go:L21-L35.
+
+        Path note: the frontend client posts to the plural `/transactions` path.
+        Source: frontend/src/services/api.ts:L40.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransactionRequest'
+            example:
+              vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+              toAddress: "<xrp-destination-address>"
+              amount: '10.5'
+      responses:
+        '201':
+          description: Transaction created and queued for settlement.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+              example:
+                id: 16fd2706-8baf-433b-82eb-8c7fada847da
+                userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                status: Pending
+                blockchainType: XRP
+                txHash: ''
+                amount: '10.5'
+                metadata: {}
+                createdAt: '2024-01-15T09:30:00Z'
+                updatedAt: '2024-01-15T09:30:00Z'
+        '400':
+          description: Invalid request payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid request payload
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '500':
+          description: Failed to create transaction.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Failed to create transaction
+  /transactions/list:
+    get:
+      tags:
+        - Transactions
+      operationId: listTransactions
+      summary: List transactions
+      description: |
+        Lists transactions visible to the caller. The route is registered, but no
+        matching handler method is defined in the readable handler source, so this
+        operation is **Designed**. Source: backend/internal/api/routes.go:L38.
+      responses:
+        '200':
+          description: A list of transactions (**Designed**).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+              example:
+                - id: 16fd2706-8baf-433b-82eb-8c7fada847da
+                  userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                  status: Processed
+                  blockchainType: XRP
+                  txHash: E3FE6EA3D48F0C2B639448020EA4F03D4F4F8FFDB243A852A0F59177921B4879
+                  amount: '10.5'
+                  metadata: {}
+                  createdAt: '2024-01-15T09:30:00Z'
+                  updatedAt: '2024-01-15T09:35:00Z'
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+  /transactions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    get:
+      tags:
+        - Transactions
+      operationId: getTransaction
+      summary: Get a transaction by ID
+      description: |
+        Retrieves a single transaction by its UUID. The router references a
+        `GetTransaction` handler, but only `GetTransactionStatus` is defined in
+        the handler source (handler/route name mismatch), so this operation is
+        **Designed**. Source: backend/internal/api/routes.go:L39.
+      responses:
+        '200':
+          description: The requested transaction (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+              example:
+                id: 16fd2706-8baf-433b-82eb-8c7fada847da
+                userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                status: Processed
+                blockchainType: XRP
+                txHash: E3FE6EA3D48F0C2B639448020EA4F03D4F4F8FFDB243A852A0F59177921B4879
+                amount: '10.5'
+                metadata: {}
+                createdAt: '2024-01-15T09:30:00Z'
+                updatedAt: '2024-01-15T09:35:00Z'
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '404':
+          description: Transaction not found (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Transaction not found
+    put:
+      tags:
+        - Transactions
+      operationId: updateTransaction
+      summary: Update a transaction
+      description: |
+        Updates a transaction's mutable attributes (for example its status). The
+        route is registered, but its handler method is not defined, so this
+        operation is **Designed**. Source: backend/internal/api/routes.go:L40.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTransactionRequest'
+            example:
+              status: Processed
+      responses:
+        '200':
+          description: The updated transaction (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+              example:
+                id: 16fd2706-8baf-433b-82eb-8c7fada847da
+                userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                status: Processed
+                blockchainType: XRP
+                txHash: E3FE6EA3D48F0C2B639448020EA4F03D4F4F8FFDB243A852A0F59177921B4879
+                amount: '10.5'
+                metadata: {}
+                createdAt: '2024-01-15T09:30:00Z'
+                updatedAt: '2024-01-15T09:40:00Z'
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '404':
+          description: Transaction not found (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Transaction not found
+    delete:
+      tags:
+        - Transactions
+      operationId: deleteTransaction
+      summary: Delete a transaction
+      description: |
+        Deletes a transaction by its UUID. The route is registered, but its
+        handler method is not defined, so this operation is **Designed**.
+        Source: backend/internal/api/routes.go:L41.
+      responses:
+        '204':
+          description: Transaction deleted; no content (**Designed**).
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '404':
+          description: Transaction not found (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Transaction not found
+
+  /signatures/create:
+    post:
+      tags:
+        - Signatures
+      operationId: createSignature
+      summary: Request a signature
+      description: |
+        Requests a custodial signature over the supplied payload for a vault's
+        key. The router references a `CreateSignature` handler, but only
+        `GetRawSignature` and `CheckSignatureStatus` are defined in the handler
+        source (handler/route name mismatch), so this operation is **Designed**.
+        Source: backend/internal/api/routes.go:L47.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSignatureRequest'
+            example:
+              vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+              dataToSign: SGVsbG8sIGJsb2NrY2hhaW4=
+      responses:
+        '201':
+          description: Signature request accepted (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Signature'
+              example:
+                id: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+                userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                status: pending
+                rawSignature: ''
+                metadata: {}
+                createdAt: '2024-01-15T09:30:00Z'
+                updatedAt: '2024-01-15T09:30:00Z'
+        '400':
+          description: Invalid request (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid request
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '500':
+          description: Failed to process the signature request (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Failed to get raw signature
+  /signatures/list:
+    get:
+      tags:
+        - Signatures
+      operationId: listSignatures
+      summary: List signatures
+      description: |
+        Lists signatures visible to the caller. The route is registered, but no
+        matching handler method is defined in the readable handler source, so this
+        operation is **Designed**. Source: backend/internal/api/routes.go:L48.
+      responses:
+        '200':
+          description: A list of signatures (**Designed**).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Signature'
+              example:
+                - id: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+                  userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                  status: Ready
+                  rawSignature: 304402201f9f...c3a5
+                  metadata: {}
+                  createdAt: '2024-01-15T09:30:00Z'
+                  updatedAt: '2024-01-15T09:32:00Z'
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+  /signatures/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    get:
+      tags:
+        - Signatures
+      operationId: getSignature
+      summary: Get signature status by ID
+      description: |
+        Retrieves a signature (and its status) by its UUID. The route is
+        registered, but no `GetSignature` handler method is defined in the
+        readable handler source; the closest source-present behavior is
+        `CheckSignatureStatus` (itself unwired to any route and non-buildable).
+        This operation is therefore **Designed**.
+        Source: backend/internal/api/routes.go:L49.
+
+        Path note: the frontend client fetches signature status via the plural
+        `/signatures/{id}` path. Source: frontend/src/services/api.ts:L46.
+      responses:
+        '200':
+          description: The requested signature (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Signature'
+              example:
+                id: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+                userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                status: Ready
+                rawSignature: 304402201f9f...c3a5
+                metadata: {}
+                createdAt: '2024-01-15T09:30:00Z'
+                updatedAt: '2024-01-15T09:32:00Z'
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '404':
+          description: Signature not found (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Signature not found
+    put:
+      tags:
+        - Signatures
+      operationId: updateSignature
+      summary: Update a signature
+      description: |
+        Updates a signature's mutable attributes (for example its status). The
+        route is registered, but its handler method is not defined, so this
+        operation is **Designed**. Source: backend/internal/api/routes.go:L50.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSignatureRequest'
+            example:
+              status: Ready
+      responses:
+        '200':
+          description: The updated signature (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Signature'
+              example:
+                id: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+                userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                status: Ready
+                rawSignature: 304402201f9f...c3a5
+                metadata: {}
+                createdAt: '2024-01-15T09:30:00Z'
+                updatedAt: '2024-01-15T09:33:00Z'
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '404':
+          description: Signature not found (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Signature not found
+    delete:
+      tags:
+        - Signatures
+      operationId: deleteSignature
+      summary: Delete a signature
+      description: |
+        Deletes a signature by its UUID. The route is registered, but its handler
+        method is not defined, so this operation is **Designed**.
+        Source: backend/internal/api/routes.go:L51.
+      responses:
+        '204':
+          description: Signature deleted; no content (**Designed**).
+        '401':
+          description: Unauthorized — missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Unauthorized
+        '404':
+          description: Signature not found (**Designed**).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Signature not found
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT bearer authentication. Obtain a token from `POST /auth/login`
+        (response `{ "token": "..." }`) and send it on every secured request as
+        the header `Authorization: Bearer <token>`. This matches the frontend
+        Axios request interceptor and the router's `AuthMiddleware`. Note: the
+        `middleware` package that would enforce this is **absent** in the
+        scaffold, so bearer enforcement is **Designed** — no token check runs and
+        the `api` package does not compile.
+        Source: frontend/src/services/api.ts:L11-L16,
+        Source: backend/internal/api/routes.go:L25.
+  parameters:
+    IdPathParam:
+      name: id
+      in: path
+      required: true
+      description: |
+        Resource identifier (UUID). Gin `:id` path parameter, registered as
+        `:id` on the vault, transaction, and signature groups.
+        Source: backend/internal/api/routes.go:L29-L31,L39-L41,L49-L51.
+        The only handler that reads it does so as an opaque string via
+        `c.Param("id")` with a non-empty check and no UUID parse, so the
+        `format: uuid` constraint below is the **Designed** contract rather
+        than an enforced runtime validation.
+        Source: backend/internal/api/handlers/transaction.go:L38-L42.
+      schema:
+        type: string
+        format: uuid
+      example: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+  schemas:
+    Organization:
+      type: object
+      description: |
+        An organization (tenant). This response schema is the **Designed** safe
+        DTO and deliberately **omits `apiKey`**. Security requirement (documented,
+        not fixed): the persisted `Organization` struct declares `APIKey` as a
+        plaintext `string` with **no `json:"-"` tag**, so if the code compiled and
+        marshaled an `Organization` directly the raw API key **would be exposed**
+        in every response and log. Treat the API key as a **secret**: the Designed
+        contract stores only a one-way **hash/verifier** (never the raw key),
+        reveals the raw key **exactly once** at creation via a separate
+        creation-only shape, **never** returns it in read responses or this
+        reusable DTO, and **redacts** it from logs. Omitting it here is therefore a
+        Designed contract, not the current code behavior. See
+        docs/security/security-model.md and docs/architecture/data-model.md
+        (Sensitive & Secret Fields). Other fields mirror the GORM entity; see
+        docs/architecture/data-model.md (Fig M1) for the canonical definition.
+        Source: backend/internal/db/schema.go:L11-L18 (specifically L15).
+      required:
+        - id
+        - name
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUID primary key.
+        name:
+          type: string
+          description: Organization display name.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      example:
+        id: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
+        name: Acme Custody
+        createdAt: '2024-01-15T09:30:00Z'
+        updatedAt: '2024-01-15T09:30:00Z'
+    User:
+      type: object
+      description: |
+        A user within an organization. This response schema is the **Designed**
+        safe DTO and deliberately omits `PasswordHash`. Security defect
+        (documented, not fixed): the persisted `User` struct gives `PasswordHash`
+        **no `json:"-"` tag**, so if the code compiled and marshaled a `User`
+        directly the password hash **would be exposed** in the JSON response.
+        Omitting it here is therefore a Designed contract, not the current code
+        behavior. See docs/security/security-model.md.
+        Source: backend/internal/db/schema.go:L20-L30 (specifically L26).
+      required:
+        - id
+        - organizationId
+        - username
+        - email
+        - role
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUID primary key.
+        organizationId:
+          type: string
+          format: uuid
+          description: Owning organization (multi-tenancy scope).
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          description: |
+            Role-based access-control role for the user (free-form string in
+            code; the design corpus enumerates Admin / Manager / Operator /
+            Auditor / API User). Source: backend/internal/db/schema.go:L27.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      example:
+        id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
+        username: alice
+        email: alice@example.com
+        role: Operator
+        createdAt: '2024-01-15T09:30:00Z'
+        updatedAt: '2024-01-15T09:30:00Z'
+    Vault:
+      type: object
+      description: |
+        A custodial vault holding an on-chain address. See
+        docs/architecture/data-model.md (Fig M1) for the canonical definition.
+        Source: backend/internal/db/schema.go:L32-L42.
+      required:
+        - id
+        - organizationId
+        - name
+        - blockchainType
+        - address
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUID primary key.
+        organizationId:
+          type: string
+          format: uuid
+          description: Owning organization (multi-tenancy scope).
+        name:
+          type: string
+          description: Vault display name.
+        blockchainType:
+          type: string
+          description: Target chain for the vault.
+          enum:
+            - XRP
+            - Ethereum
+        address:
+          type: string
+          description: On-chain address held by the custodial vault.
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Free-form JSON metadata, intended to persist as JSONB via gorm.JSONMap (Designed; gorm.JSONMap is undefined in gorm.io/gorm, so it does not compile and no JSONB column is created).
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      example:
+        id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+        organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
+        name: Treasury Vault
+        blockchainType: XRP
+        address: "<xrp-vault-address>"
+        metadata: {}
+        createdAt: '2024-01-15T09:30:00Z'
+        updatedAt: '2024-01-15T09:30:00Z'
+    Transaction:
+      type: object
+      description: |
+        A blockchain transaction. See docs/architecture/data-model.md (Fig M1)
+        for the canonical definition.
+        Source: backend/internal/db/schema.go:L44-L56.
+      required:
+        - id
+        - userId
+        - vaultId
+        - status
+        - blockchainType
+        - amount
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUID primary key.
+        userId:
+          type: string
+          format: uuid
+          description: The user who initiated the transaction.
+        vaultId:
+          type: string
+          format: uuid
+          description: The source vault the transaction draws from.
+        status:
+          type: string
+          description: |
+            Lifecycle status. The backend vocabulary is `Pending` / `Processed`,
+            set via the `db.TransactionStatusPending` and
+            `db.TransactionStatusProcessed` constants. The frontend Zod schema
+            uses a different vocabulary of `Pending` / `Completed` / `Failed`.
+            Source: backend/internal/core/transaction/service.go:L46,L81,
+            Source: frontend/src/schema/transaction.ts:L10.
+          enum:
+            - Pending
+            - Processed
+        blockchainType:
+          type: string
+          description: Target chain for the transaction.
+          enum:
+            - XRP
+            - Ethereum
+        txHash:
+          type: string
+          description: On-chain transaction hash; populated after broadcast.
+        amount:
+          type: string
+          description: |
+            Arbitrary-precision decimal amount serialized as a string to avoid
+            floating-point rounding (backed by `decimal.Decimal` in code).
+            Source: backend/internal/db/schema.go:L52.
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Free-form JSON metadata, intended to persist as JSONB via gorm.JSONMap (Designed; gorm.JSONMap is undefined in gorm.io/gorm, so it does not compile and no JSONB column is created).
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      example:
+        id: 16fd2706-8baf-433b-82eb-8c7fada847da
+        userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+        status: Pending
+        blockchainType: XRP
+        txHash: ''
+        amount: '10.5'
+        metadata: {}
+        createdAt: '2024-01-15T09:30:00Z'
+        updatedAt: '2024-01-15T09:30:00Z'
+    Signature:
+      type: object
+      description: |
+        A custodial signature request and its result. See
+        docs/architecture/data-model.md (Fig M1) for the canonical definition.
+        Source: backend/internal/db/schema.go:L58-L68.
+      required:
+        - id
+        - userId
+        - vaultId
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUID primary key.
+        userId:
+          type: string
+          format: uuid
+          description: The user who requested the signature.
+        vaultId:
+          type: string
+          format: uuid
+          description: The vault whose key produces the signature.
+        status:
+          type: string
+          description: |
+            Signature lifecycle status — a free-form, unconstrained string in
+            code. The service writes only the literal `pending`; the terminal
+            states `Ready` / `Failed` are referenced via the undefined
+            `signature.StatusReady` / `signature.StatusFailed` constants and are
+            therefore **Designed**. The frontend Zod schema uses a divergent
+            `Completed` vocabulary. Source: backend/internal/db/schema.go:L63,
+            Source: backend/internal/core/signature/service.go:L30,
+            Source: backend/internal/tasks/signature_processor.go:L46,L55.
+        rawSignature:
+          type: string
+          description: |
+            **Sensitive cryptographic material** (raw custodian signature bytes).
+            Handling contract is **Designed** (documented, not enforced today):
+            classify as sensitive, minimize retention (the settlement path caches
+            the full signature object — including this field — under
+            `signature:<id>` in **unencrypted** Redis for 24 hours, a retention
+            concern to reduce), encrypt at rest and in transit, and **never log**.
+            It should normally be **omitted** from list/read responses and
+            surfaced only to authorized callers; it is retained in this schema
+            solely to document the persisted field. See
+            docs/security/security-model.md and docs/architecture/data-model.md
+            (Sensitive & Secret Fields).
+            Source: backend/internal/db/schema.go:L64,
+            Source: backend/internal/tasks/signature_processor.go:L46-L58.
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Free-form JSON metadata, intended to persist as JSONB via gorm.JSONMap (Designed; gorm.JSONMap is undefined in gorm.io/gorm, so it does not compile and no JSONB column is created).
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      example:
+        id: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+        userId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+        status: pending
+        rawSignature: ''
+        metadata: {}
+        createdAt: '2024-01-15T09:30:00Z'
+        updatedAt: '2024-01-15T09:30:00Z'
+    LoginRequest:
+      type: object
+      description: |
+        Login credentials. Both fields are required (`binding:"required"`).
+        Source: backend/internal/api/handlers/auth.go:L22-L25.
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+      example:
+        username: alice
+        password: 'S3cret-Passphrase!'
+    RegisterRequest:
+      type: object
+      description: |
+        Registration payload. **Designed** — the fields are inferred from the
+        `User` entity and the organization scope, since the `Register` handler is
+        not defined in the readable handler source.
+        Source: backend/internal/db/schema.go:L20-L30.
+      required:
+        - username
+        - email
+        - password
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        organizationId:
+          type: string
+          format: uuid
+      example:
+        username: alice
+        email: alice@example.com
+        password: 'S3cret-Passphrase!'
+        organizationId: 3f1a5b2c-9d84-4c1e-8a7b-2b6d5e4f0a11
+    CreateVaultRequest:
+      type: object
+      description: |
+        Vault creation payload. Fields are inferred from the service constructor
+        `VaultService.CreateVault(organizationID, name, blockchainType)`; the
+        `organizationID` is resolved server-side from the JWT, not the body.
+        Source: backend/internal/core/vault/service.go:L24.
+      required:
+        - name
+        - blockchainType
+      properties:
+        name:
+          type: string
+        blockchainType:
+          type: string
+          enum:
+            - XRP
+            - Ethereum
+      example:
+        name: Treasury Vault
+        blockchainType: XRP
+    UpdateVaultRequest:
+      type: object
+      description: |
+        Vault update payload. **Designed** — fields inferred; the update handler
+        is not defined in the readable handler source.
+        Source: backend/internal/api/routes.go:L30.
+      properties:
+        name:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+      example:
+        name: Treasury Vault (renamed)
+        metadata:
+          tier: cold
+    CreateTransactionRequest:
+      type: object
+      description: |
+        Transaction creation payload. Fields are inferred from the service
+        constructor
+        `TransactionService.CreateTransaction(userID, vaultID, toAddress, amount)`;
+        the `userID` is resolved server-side from the JWT, not the body.
+        Source: backend/internal/core/transaction/service.go:L29.
+
+        Request-field divergence (behavioral divergence; Designed to reconcile).
+        The only client that builds this payload sends the destination under the
+        key `recipientAddress`, not `toAddress`, and sends `amount` as a JSON
+        number rather than a decimal string: `TransactionForm` dispatches
+        `createTransaction({ vaultId, amount: parseFloat(amount),
+        recipientAddress })`, the thunk forwards it unchanged, and
+        `api.createTransaction` POSTs it verbatim.
+        Source: frontend/src/components/TransactionForm.tsx:L13,L34;
+        frontend/src/store/transactionSlice.ts:L10;
+        frontend/src/services/api.ts:L38-L42.
+        Because the handler binds with `ShouldBindJSON`, never enables
+        `DisallowUnknownFields`, and the repository declares only two
+        `binding:"required"` tags (both on the login body), the unrecognized key
+        would be ignored and the destination left at its zero value rather than
+        rejected with 400.
+        Source: backend/internal/api/handlers/transaction.go:L22-L26;
+        backend/internal/api/handlers/auth.go:L23-L24.
+        `toAddress` as specified here is authoritative for this API; the client
+        key is the side that must change. The mismatch is latent - neither layer
+        builds at this checkpoint, and `transaction.CreateTransactionRequest` is
+        referenced by the handler but declared nowhere in the readable source,
+        which is why this shape is inferred from the service signature.
+        Source: backend/internal/api/handlers/transaction.go:L22.
+      required:
+        - vaultId
+        - toAddress
+        - amount
+      properties:
+        vaultId:
+          type: string
+          format: uuid
+        toAddress:
+          type: string
+          description: >-
+            Destination on-chain address. Authoritative field name. The frontend
+            client sends this value as `recipientAddress` instead, which the
+            server would silently ignore - see the schema description.
+        amount:
+          type: string
+          description: >-
+            Arbitrary-precision decimal amount serialized as a string. The
+            frontend client sends a JSON number (`parseFloat`) instead.
+      example:
+        vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+        toAddress: "<xrp-destination-address>"
+        amount: '10.5'
+    UpdateTransactionRequest:
+      type: object
+      description: |
+        Transaction update payload. **Designed** — fields inferred; the update
+        handler is not defined in the readable handler source. The `status` uses
+        the backend vocabulary `Pending` / `Processed`.
+        Source: backend/internal/api/routes.go:L40,
+        Source: backend/internal/core/transaction/service.go:L46,L81.
+      properties:
+        status:
+          type: string
+          enum:
+            - Pending
+            - Processed
+      example:
+        status: Processed
+    CreateSignatureRequest:
+      type: object
+      description: |
+        Signature request payload. Fields are inferred from the service
+        constructor
+        `SignatureService.RequestSignature(userID, vaultID, dataToSign)`; the
+        `userID` is resolved server-side from the JWT, not the body. `dataToSign`
+        is base64-encoded bytes.
+        Source: backend/internal/core/signature/service.go:L24.
+      required:
+        - vaultId
+        - dataToSign
+      properties:
+        vaultId:
+          type: string
+          format: uuid
+        dataToSign:
+          type: string
+          format: byte
+          description: Base64-encoded payload to be signed.
+      example:
+        vaultId: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+        dataToSign: SGVsbG8sIGJsb2NrY2hhaW4=
+    UpdateSignatureRequest:
+      type: object
+      description: |
+        Signature update payload. **Designed** — fields inferred; the update
+        handler is not defined in the readable handler source. The `status`
+        vocabulary follows the Signature schema: only `pending` is written by
+        code, while `Ready` / `Failed` are Designed terminal states.
+        Source: backend/internal/api/routes.go:L50,
+        Source: backend/internal/core/signature/service.go:L30.
+      properties:
+        status:
+          type: string
+      example:
+        status: Ready
+    LoginResponse:
+      type: object
+      description: |
+        Successful login response. Mirrors the handler JSON `{ "token": "..." }`.
+        Source: backend/internal/api/handlers/auth.go:L38.
+      properties:
+        token:
+          type: string
+          description: Signed JWT to be used as the bearer token.
+      example:
+        token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.PLACEHOLDER_CLAIMS.PLACEHOLDER_SIGNATURE
+    MessageResponse:
+      type: object
+      description: |
+        Generic success message. Mirrors the handler JSON
+        `{ "message": "..." }`. Source: backend/internal/api/handlers/auth.go:L54.
+      properties:
+        message:
+          type: string
+      example:
+        message: Logged out successfully
+    Error:
+      type: object
+      description: |
+        Error envelope. Mirrors the handler JSON `{ "error": "..." }` used across
+        all handlers. Source: backend/internal/api/handlers/auth.go:L28,L34,L44,L50.
+      properties:
+        error:
+          type: string
+      example:
+        error: Invalid request payload
+

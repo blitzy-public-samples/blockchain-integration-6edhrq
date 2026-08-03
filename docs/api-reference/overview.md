@@ -1,0 +1,144 @@
+# API Reference — Overview
+
+The backend of the Blockchain Integration Service is a Go/Gin HTTP service that exposes **18 REST endpoints** grouped into four resource collections — Authentication, Vaults, Transactions, and Signatures — registered on a single router behind global logging and recovery middleware. This reference documents that public HTTP contract **as declared in the router source**, not as an aspirational target; a companion machine-readable [`openapi.yaml`](openapi.yaml) restates the same contract in OpenAPI 3.0 form. Every endpoint, path, and behavior described here traces to a cited source location, and every capability carries a maturity label so readers can distinguish what is present in source from what is only specified. Note at the outset: the backend has **no `go.mod`** and the `api` package imports the absent `backend/internal/api/middleware` package, so the router does **not build today** — every route below is described by what its source is *written to* do, never by observed runtime behavior. `Source: backend/internal/api/routes.go:L1-L54`.
+
+## Maturity Legend
+
+Every capability across the API reference is labeled with the project-wide maturity discipline, consistent with the sibling resource pages and the architecture documentation:
+
+- **Implemented** — present in code, building, and functional today. Per the single operational-truth vocabulary defined in [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md), this label is **reserved**, and **nothing in this repository qualifies for it** at this checkpoint (there is no `go.mod`, and the `api` package imports the absent `middleware` package). It is therefore not applied to any route on this page.
+- **Source-present (non-buildable)** — the handler method is written in source, but the containing package does not compile (no `go.mod`; absent imports; and, for the entity types, the undefined `gorm.JSONMap`), so no request/response behavior may be asserted as running. This is the operational-truth equivalent of *Implemented-with-defects* used on the architecture pages, applied here to the four routes whose handler methods are defined.
+- **Designed** — specified (a route is registered, or an intended contract is described), but the backing implementation is absent in code — for example, a route wired to a handler method that does not exist.
+- **Provisioned** — scaffolding or configuration exists, but the capability is not yet fully wired to run.
+
+The consolidated maturity reconciliation between the design corpus and the on-disk scaffold — including the full catalog of known defects — is maintained in [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md).
+
+## Endpoint Index
+
+The router registers the following 18 endpoints, grouped by resource. Paths are shown **exactly as they appear in code** — unprefixed and, for vaults, singular (`/vault`, not `/vaults`); see [Path Conventions and the Prefix/Pluralization Discrepancy](#path-conventions-and-the-prefixpluralization-discrepancy) for the reconciliation. The **Auth** column indicates whether the route attaches `AuthMiddleware()`; `Public` routes attach no middleware. **Maturity** reflects whether the referenced handler method is defined in code: only `Login`, `Logout`, `CreateVault`, and `CreateTransaction` are defined, so those four routes are **Source-present (non-buildable)** and the remaining fourteen are **Designed** (their routes are wired to handler methods that are not defined). No route is **Implemented**: even for the four with a defined handler, the `api` package does not compile — it imports the absent `backend/internal/api/middleware` package, references handlers as method *expressions on the type* (for example `handlers.AuthHandler.Login`, not an instance method), and the backend has no `go.mod`. `Source: backend/internal/api/routes.go:L5-L52`.
+
+| Method | Path | Auth | Maturity | Reference |
+|--------|------|------|----------|-----------|
+| POST | `/auth/login` | Public | Source-present (non-buildable) | [authentication.md](authentication.md) |
+| POST | `/auth/register` | Public | Designed | [authentication.md](authentication.md) |
+| POST | `/auth/logout` | Bearer | Source-present (non-buildable) | [authentication.md](authentication.md) |
+| POST | `/vault/create` | Bearer | Source-present (non-buildable) | [vaults.md](vaults.md) |
+| GET | `/vault/list` | Bearer | Designed | [vaults.md](vaults.md) |
+| GET | `/vault/:id` | Bearer | Designed | [vaults.md](vaults.md) |
+| PUT | `/vault/:id` | Bearer | Designed | [vaults.md](vaults.md) |
+| DELETE | `/vault/:id` | Bearer | Designed | [vaults.md](vaults.md) |
+| POST | `/transactions/create` | Bearer | Source-present (non-buildable) | [transactions.md](transactions.md) |
+| GET | `/transactions/list` | Bearer | Designed | [transactions.md](transactions.md) |
+| GET | `/transactions/:id` | Bearer | Designed | [transactions.md](transactions.md) |
+| PUT | `/transactions/:id` | Bearer | Designed | [transactions.md](transactions.md) |
+| DELETE | `/transactions/:id` | Bearer | Designed | [transactions.md](transactions.md) |
+| POST | `/signatures/create` | Bearer | Designed | [signatures.md](signatures.md) |
+| GET | `/signatures/list` | Bearer | Designed | [signatures.md](signatures.md) |
+| GET | `/signatures/:id` | Bearer | Designed | [signatures.md](signatures.md) |
+| PUT | `/signatures/:id` | Bearer | Designed | [signatures.md](signatures.md) |
+| DELETE | `/signatures/:id` | Bearer | Designed | [signatures.md](signatures.md) |
+
+The three authentication routes are defined at `Source: backend/internal/api/routes.go:L19-L21`; the five vault routes at `Source: backend/internal/api/routes.go:L27-L31`; the five transaction routes at `Source: backend/internal/api/routes.go:L37-L41`; and the five signature routes at `Source: backend/internal/api/routes.go:L47-L51`. The counts by maturity are four **Source-present (non-buildable)** and fourteen **Designed**, totaling the full 18-endpoint surface.
+
+## Authentication Model
+
+All routes except `POST /auth/login` and `POST /auth/register` are **declared** to be secured with JWT bearer authentication (enforcement is **Designed** — see below, because the guard package is absent). A client is intended to first obtain a token by calling `POST /auth/login`, whose handler is written to validate the supplied credentials and return a signed JWT in the response body as `{ "token": "<jwt>" }` (**Source-present, non-buildable** — the handler exists, but the `api` package and the `internal/core/auth` service it calls do not compile). `Source: backend/internal/api/handlers/auth.go:L21-L39`. The client is then coded to attach that token to every subsequent request using the `Authorization` header, exactly as the frontend Axios client does in its request interceptor. `Source: frontend/src/services/api.ts:L11-L16`.
+
+```http
+Authorization: Bearer <jwt>
+```
+
+Enforcement on protected routes is delegated to `middleware.AuthMiddleware()`, which is attached to the vault, transaction, and signature route groups and to `POST /auth/logout`. `Source: backend/internal/api/routes.go:L25`. This guard is **Designed**: the `backend/internal/api/middleware` package is imported by the router but is not present in the repository, so the check is specified in the wiring yet cannot execute today. `Source: backend/internal/api/routes.go:L6`. Likewise, the `AuthService` that `Login` and `Logout` delegate to (`backend/internal/core/auth`) is imported but absent, so token issuance and revocation are **Designed** even though the two handler methods that call it are themselves **source-present (non-buildable)**. `Source: backend/internal/api/handlers/auth.go:L5`.
+
+**Scope of the "Public" label.** `Public` in the endpoint index above means *no middleware is attached to this route in the router* — which is accurate for the engine `SetupRouter()` registers the 18 routes on. `Source: backend/internal/api/routes.go:L17-L22`. Note, however, that the composition root registers `middleware.AuthMiddleware()` **engine-wide** on its own separate engine, with no exemption for `/auth/login` or `/auth/register`. `Source: backend/cmd/server/main.go:L76`. That engine is the one actually passed to `router.Run`, yet it carries no routes, because the routed engine `SetupRouter()` returns is discarded at the call site. `Source: backend/cmd/server/main.go:L50-L52,L60`. So the `Public` labels describe the router's contract, while the composition root's stated intent would gate even login behind a token that an unauthenticated caller could not yet possess. The two-engine wiring defect and its reconciliation are analyzed in [`../architecture/backend.md`](../architecture/backend.md#router-signature-mismatch--and-two-engines-neither-of-which-works-source-present-defect-correction-designed) and catalogued as Defect 1.
+
+## Path Conventions and the Prefix/Pluralization Discrepancy
+
+Three independent sources describe the API's paths, and they do **not** fully agree — but the disagreement is **not uniform**, so it is worth being precise about which calls actually diverge. The backend router registers **unprefixed, action-suffixed** paths and uses the **singular** noun `/vault`; the frontend Axios client issues only three calls, two of which diverge and one of which matches the router exactly; and the design corpus (Technical Specification, §API DESIGN) documents a **versioned** `/api/v1/...` scheme with plural nouns throughout. The table below compares all three for each affected resource and states the verdict for the frontend call in each row.
+
+| Resource | Backend (code, authoritative) | Frontend client | Frontend vs. backend | Tech Spec design |
+|----------|-------------------------------|-----------------|----------------------|------------------|
+| Vaults | `/vault/create`, `/vault/list`, `/vault/:id` | `/vaults` | **Diverges** — plural noun, and no `/list` sub-path | `/api/v1/vaults`, `/api/v1/vaults/{id}` |
+| Transactions | `/transactions/create`, `/transactions/list`, `/transactions/:id` | `POST /transactions` | **Diverges** — omits the `/create` sub-path the router declares | `/api/v1/transactions`, `/api/v1/transactions/{id}` |
+| Signatures | `/signatures/create`, `/signatures/list`, `/signatures/:id` | `GET /signatures/:id` | **Agrees** — same noun, same parameterized path | `/api/v1/signatures`, `/api/v1/signatures/{id}` |
+
+The backend paths are registered at `Source: backend/internal/api/routes.go:L25-L31` (the vault group is shown; the transaction and signature groups follow the same shape at L35-L41 and L45-L51). The three frontend calls are at `Source: frontend/src/services/api.ts:L34,L40,L46`. The versioned plural design table is at `Source: documentation/Technical Specifications.md:§API DESIGN`.
+
+So exactly **two** of the client's three calls are frontend/backend divergences — `GET /vaults` against `/vault/list`, and `POST /transactions` against `/transactions/create`. The third, `GET /signatures/:id`, matches the router's registered path and is **not** a path divergence; it is nonetheless unreachable today for an unrelated reason, namely that the `GetSignature` handler the route names is absent (see [`signatures.md`](signatures.md)). The `/api/v1` prefix is a divergence of the **design corpus** against the code on all three resources, independent of the client.
+
+**Resolution.** This API reference documents the **backend code paths as authoritative** — no `/api/v1` prefix, and the singular `/vault` noun — because the router source is the contract the service is written to serve (no service runs today, as the `api` package does not build). Recorded as **divergences to be reconciled** are precisely: the frontend's `GET /vaults` and `POST /transactions` calls, and the Technical Specification's `/api/v1/...` scheme on all three resources. The frontend's `GET /signatures/:id` is **not** among them — it already matches the router and needs no path change. Unifying the rest (whether by adding a version prefix and pluralizing the backend, or by correcting the frontend and the specification) is **Designed** work, not current behavior. The full catalog of this and the other scaffold-versus-design gaps is maintained in [`../architecture/scaffold-vs-design.md`](../architecture/scaffold-vs-design.md); note that the transaction resource additionally diverges on the *request field name* inside the body, catalogued separately as Defect 24 and documented at [`transactions.md`](transactions.md#post-transactionscreate).
+
+## OpenAPI Specification and the `swag init` Workflow
+
+A machine-readable OpenAPI 3.0 description of all 18 endpoints accompanies this reference at [`openapi.yaml`](openapi.yaml). It fulfills the Software Project Proposal's commitment to "Swagger docs for all endpoints" `Source: documentation/Software Project Proposal.md:L135,L388` and its target of 100% endpoint documentation coverage `Source: documentation/Software Project Proposal.md:L82`.
+
+The intended generation workflow uses the swaggo toolchain, which parses `// @` annotation comments on the handlers and emits a specification, taking the composition root as its entry point:
+
+```bash
+go install github.com/swaggo/swag/cmd/swag@v1.16.6
+swag init -g backend/cmd/server/main.go -o docs/api-reference --parseDependency --parseInternal
+```
+
+**Version metadata caveat.** The command above pins the module version `@v1.16.6`, but the installed binary self-reports a **different** version: `swag --version` prints `swag version v1.16.4`. This is an upstream release-metadata defect rather than a mis-resolved install — the `v1.16.6` tag ships a hard-coded version constant that was never bumped, and the CLI surfaces that constant verbatim as its reported version. `Source: github.com/swaggo/swag@v1.16.6/version.go:L4, github.com/swaggo/swag@v1.16.6/cmd/swag/main.go:L282`. Pin and verify the toolchain by **module version** — the `@v1.16.6` argument, recorded in `go.sum` once a module exists — and never by the binary's `--version` output, which cannot distinguish v1.16.4 from v1.16.6.
+
+**Important format caveat.** `swag` (v1.16.x, the current stable v1 line) emits **Swagger 2.0 (OpenAPI 2.0)** — `swagger.json` / `swagger.yaml` — **not** OpenAPI 3.0. `Source: https://github.com/swaggo/swag`. The `openapi.yaml` committed in this folder is an **OpenAPI 3.0** document, so it cannot be produced by `swag init` alone: a conversion step (for example `swagger2openapi`, or an equivalent 2.0→3.0 converter) would be required after generation, or the spec must be authored/maintained directly as OAS 3.0.
+
+This workflow is **Designed**. No swaggo `// @` annotations exist on the handlers yet, and the backend is not a Go module (there is no `go.mod`), so `swag init` cannot run against the code as it stands; Go must also be installed in the environment when documentation is built. `Source: backend/cmd/server/main.go`. Because of both the absent module and the 2.0-vs-3.0 format gap above, the `openapi.yaml` committed in this folder is **hand-authored** directly as OpenAPI 3.0 from the router, handlers, and database schema so that the machine-readable contract stays available and accurate in the interim.
+
+**Specification validation and accepted warnings.** Because the specification is hand-authored rather than generated, it is validated directly against the OpenAPI 3.0 schema. The committed document is **Implemented** — present, parseable, and schema-valid as OpenAPI 3.0.3 with zero errors across its 12 paths and 18 operations:
+
+```bash
+npx @redocly/cli@2.43.2 lint docs/api-reference/openapi.yaml   # exit 0: valid, 0 errors, 2 accepted warnings
+```
+
+That lint reports two warnings under the tool's built-in recommended ruleset. Both are **deliberately accepted** consequences of documenting a scaffold honestly, not specification defects, and neither affects OpenAPI 3.0 validity:
+
+| Rule | Location | Warning | Why it is accepted |
+|------|----------|---------|--------------------|
+| `no-server-example.com` | `openapi.yaml:82:10` | Server `url` should not point to example.com or localhost. | The only base URL that can honestly be published is illustrative. No `/api/v1` prefix exists in code, and the bind address is read from the **absent** `internal/config` package, so no resolvable host exists to cite; the `servers` entry states this inline rather than implying a deployed endpoint. `Source: docs/api-reference/openapi.yaml:L81-L92, backend/cmd/server/main.go:L59-L60` |
+| `no-unused-components` | `openapi.yaml:987:5` | Component: "Organization" is never used. | `Organization` is one of the five persisted entities, but **no route exposes an organization resource** — the router declares zero organization endpoints — so the schema is intentionally defined without any `$ref`. It is retained to carry the tenant entity's documented shape and its `apiKey` exposure disclosure. `Source: backend/internal/db/schema.go:L11, backend/internal/api/routes.go:L9-L54` |
+
+Enforcing this validation automatically is **Designed**: neither continuous-integration workflow validates the specification today, so the check is a manual documentation-build step. `Source: .github/workflows/backend-ci.yml, .github/workflows/frontend-ci.yml (no specification lint step present)`.
+
+**Toolchain advisory posture.** Both tools named above run only at documentation-build time and are never shipped to a reader — but "build-time only" is a *reachability* argument, not an advisory count, so the two are stated separately here and the count is taken from the **resolved dependency tree**, not from the package alone.
+
+- `github.com/swaggo/swag@v1.16.6` carries **zero** advisories. `Source: https://api.osv.dev/v1/query (ecosystem Go, package github.com/swaggo/swag) — 0 records, queried 2026-08-01`.
+- The specification validator is pinned to **`@redocly/cli@2.43.2`** specifically so that the same can be said of it: a clean-room install of that version resolves **1** package in total (2.x bundles its own dependencies) and `npm audit` reports **0** advisories at every severity. `Source: npm install @redocly/cli@2.43.2 && npm audit --json → metadata.vulnerabilities {info,low,moderate,high,critical} all 0, metadata.dependencies.total = 1, measured 2026-08-01`. That self-bundling is also what leaves `npm audit` no transitive tree to walk, so the zero was confirmed **against the bundled code itself** rather than taken at face value: the `redoc` renderer is still inlined in the bundle, and its `mergeObjects` carries the `redoc@2.4.0` `__proto__` guard rather than the unguarded `2.2.0` form. `Source: docs/security/security-model.md (@redocly/cli — why the pin was raised from 1.25.11)`.
+
+This pin is a **correction to the version this page previously prescribed.** `@redocly/cli@1.25.11` declares `redoc: ~2.2.0` as a direct dependency and so resolves `redoc@2.2.0`, which is affected by **GHSA-9rhg-254w-fh9x / CVE-2024-57083** — prototype pollution via `Module.mergeObjects`, CWE-1321, **HIGH**, CVSS v4 **7.7**, affecting `redoc < 2.4.0` and first patched in `redoc@2.4.0`. A clean-room install of `1.25.11` resolves **306** packages and `npm audit` reports **2 HIGH** advisories (`redoc` itself, and `@redocly/cli <= 1.28.3` *via* `redoc`). `Source: npm install @redocly/cli@1.25.11 && npm audit --json → 2 high, metadata.dependencies.total = 306, measured 2026-08-01`, `Source: https://api.github.com/advisories/GHSA-9rhg-254w-fh9x (severity high, CVSS v4 7.7, not withdrawn, queried 2026-08-01)`.
+
+Two methodological notes follow from that, because they are the reason the earlier claim on this page was wrong. First, the npm **bulk** advisory service returns **zero** records for `@redocly/cli` at *every* version — it reports only advisories filed against a package **directly**, so a transitive exposure is invisible to it; an advisory posture must therefore be read from `npm audit`, which walks the resolved tree. `Source: https://registry.npmjs.org/-/npm/v1/security/advisories/bulk (@redocly/cli 1.25.11, 1.34.18, 2.43.2 → 0 records each; redoc 2.2.0 → 1 record), queried 2026-08-01`. Second, the substitution is behaviour-preserving for this document: `2.43.2` produces the **same two warnings, under the same two rules, at the same two locators** as the previously pinned version, with the same exit code and the same warning count — verified by running both versions against the committed specification. `Source: @redocly/cli 1.25.11 and 2.43.2 both report exit 0, 2 warnings, no-server-example.com at openapi.yaml:82:10 and no-unused-components at openapi.yaml:987:5, measured 2026-08-01`. The audited inventory for every dependency this documentation set and the executive deck rely on — including the advisories that *do* affect the deck's pinned browser runtime, and why the `1.34.x` line was rejected rather than adopted — is enumerated in [Documentation Toolchain Supply Chain and Advisory Posture](../security/security-model.md#documentation-toolchain-supply-chain-and-advisory-posture), together with the commands to reproduce the audit. `Source: docs/security/security-model.md (documentation-dependency inventory)`.
+
+## Request and Response Conventions
+
+The following conventions hold across the resources unless a resource page notes an exception:
+
+- **Request bodies** are JSON; handlers bind them with Gin's `ShouldBindJSON`, and a malformed or incomplete body yields `400` with an error envelope. `Source: backend/internal/api/handlers/auth.go:L27-L29`, `Source: backend/internal/api/handlers/transaction.go:L23-L25`.
+- **Error responses** use a single-key envelope `{ "error": "<message>" }`. `Source: backend/internal/api/handlers/auth.go:L28,L34`, `Source: backend/internal/api/handlers/transaction.go:L24,L30`.
+- **Simple success acknowledgements** use `{ "message": "<message>" }` — for example, the logout response. `Source: backend/internal/api/handlers/auth.go:L54`.
+- **`id` path parameters** are UUID strings, read from the route via `c.Param("id")`. `Source: backend/internal/api/handlers/transaction.go:L38`.
+- **Monetary `amount` values** are intended to be arbitrary-precision decimals serialized as JSON **strings** (for example `"10.5"`), backed by `decimal.Decimal`, to avoid floating-point rounding. `Source: backend/internal/db/schema.go:L52`.
+
+### Response Serialization — Designed camelCase contract vs. actual PascalCase output
+
+The request and response examples on the resource pages, and the schemas in [`openapi.yaml`](openapi.yaml), use **lower-camelCase** field names (`id`, `createdAt`, `organizationId`, `blockchainType`, `txHash`, `rawSignature`, …). **That camelCase shape is the Designed API contract** — the intended wire format once a response DTO layer or `json` struct tags are introduced. It is *not* what the current code would emit.
+
+As the domain types stand in source today, they carry **no `json` struct tags** and each embeds `gorm.Model`. `Source: backend/internal/db/schema.go:L11-L68`. The entity-returning handlers marshal these structs directly — for example `c.JSON(201, createdVault)` and `c.JSON(200, vaults)` — with no DTO in between. `Source: backend/internal/api/handlers/vault.go:L56,L32`. Consequently, **were these types to compile and be marshaled by Go's `encoding/json` as-declared, the wire output would be PascalCase**, not camelCase:
+
+- Field keys would be the Go field names verbatim — `ID`, `Name`, `APIKey`, `OrganizationID`, `BlockchainType`, `TxHash`, `RawSignature`, `CreatedAt`, `UpdatedAt` — because there are no `json` tags to lower-case them.
+- The outer `ID uuid.UUID` shadows the embedded `gorm.Model.ID uint` (a shallower field wins in `encoding/json`), so `ID` serializes as the UUID; but the embedded `DeletedAt` is **not** shadowed, so it is **promoted and serialized** as an extra `DeletedAt` key (rendering as `null` for a live record, via `gorm.DeletedAt`'s `MarshalJSON`). `Source: backend/internal/db/schema.go:L12-L17`.
+- For `User`, `PasswordHash` has **no `json:"-"` tag**, so it would be **exposed in responses** — the security risk documented as a *"Security defect (documented, not fixed)"* under [Secrets and Key Management](../security/security-model.md#secrets-and-key-management) in the security model. `Source: backend/internal/db/schema.go:L26`.
+
+This entire path is **Source-present (non-buildable)** in any case: `schema.go` does not compile because `Metadata gorm.JSONMap` is an undefined type (see [`../architecture/data-model.md`](../architecture/data-model.md#gap-notes)), so **no response is actually serialized today**. The reconciliation — adding `json` tags or a dedicated response DTO so the emitted contract matches the camelCase examples, and adding the `PasswordHash` exclusion — is **Designed** work. Each resource page repeats this note in brief and its `openapi.yaml` schemas are annotated accordingly. `Source: backend/internal/db/schema.go:L39,L53,L65`.
+
+### Entity Definitions
+
+The request and response bodies on the resource pages reference a shared set of domain entities — Organization, User, Vault, Transaction, and Signature. Rather than redefining those fields on every page, all entity structures are defined once in [`../architecture/data-model.md`](../architecture/data-model.md) and depicted in **Fig M1 — Data Model ERD** ([open the figure](../architecture/data-model.md#fig-m1--data-model-erd)). Each resource page links back to that figure for the authoritative field definitions.
+
+### Resource Pages
+
+- [Authentication](authentication.md) — `POST /auth/login`, `POST /auth/register`, `POST /auth/logout`.
+- [Vaults](vaults.md) — `POST /vault/create`, `GET /vault/list`, and the `/vault/:id` read/update/delete trio.
+- [Transactions](transactions.md) — `POST /transactions/create`, `GET /transactions/list`, and the `/transactions/:id` read/update/delete trio.
+- [Signatures](signatures.md) — `POST /signatures/create`, `GET /signatures/list`, and the `/signatures/:id` read/update/delete trio.
+- [`openapi.yaml`](openapi.yaml) — machine-readable OpenAPI 3.0 specification for all 18 endpoints.
