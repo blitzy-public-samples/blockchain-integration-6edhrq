@@ -82,7 +82,7 @@ The status vocabulary the service is coded to write is `pending` at request time
 
 **Signature UI page fails to load its actions (broken store slice).** The Signature Management page imports `requestSignature` and `checkSignatureStatus` from `@/store/signatureSlice` `Source: frontend/src/pages/SignatureManagement.tsx:L7`, but the Redux store registers only `vault`, `transaction`, and `user` reducers - there is no signature slice `Source: frontend/src/store/index.ts:L8-L12`. The import is unresolved (**source-present defect**). Documented, not fixed; tracked in [Scaffold vs Design](../architecture/scaffold-vs-design.md).
 
-**Typed hooks not exported.** The page imports `useAppSelector` and `useAppDispatch` from `@/store` `Source: frontend/src/pages/SignatureManagement.tsx:L6`, but the store exports only `store`, `RootState`, and `AppDispatch` - the typed hooks are not defined `Source: frontend/src/store/index.ts:L8-L12`. This **source-present defect** blocks compilation; documented, not fixed.
+**Typed hooks not exported.** The page imports `useAppSelector` and `useAppDispatch` from `@/store` `Source: frontend/src/pages/SignatureManagement.tsx:L6`, but the store exports only `store`, `RootState`, and `AppDispatch` - the typed hooks are not defined `Source: frontend/src/store/index.ts:L19-L22`. This **source-present defect** blocks compilation; documented, not fixed.
 
 **Undefined signature types in the page.** The page references `SignatureData` and `SignatureRequestData` types that are not defined `Source: frontend/src/pages/SignatureManagement.tsx:L14,L33`. These are **source-present defects** that block compilation; documented, not fixed.
 

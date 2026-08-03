@@ -979,10 +979,19 @@ components:
       name: id
       in: path
       required: true
-      description: Resource identifier (UUID). Gin `:id` path parameter.
+      description: |
+        Resource identifier (UUID). Gin `:id` path parameter, registered as
+        `:id` on the vault, transaction, and signature groups.
+        Source: backend/internal/api/routes.go:L29-L31,L39-L41,L49-L51.
+        The only handler that reads it does so as an opaque string via
+        `c.Param("id")` with a non-empty check and no UUID parse, so the
+        `format: uuid` constraint below is the **Designed** contract rather
+        than an enforced runtime validation.
+        Source: backend/internal/api/handlers/transaction.go:L38-L42.
       schema:
         type: string
         format: uuid
+      example: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
   schemas:
     Organization:
       type: object
